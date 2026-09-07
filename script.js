@@ -1,7 +1,8 @@
 // ==================== STORAGE KEY ====================
 const STORAGE_KEY = 'qarz_daftari_data';
 const THEME_KEY = 'qarz_daftari_theme';
-const API_BASE_URL = window.QARZ_API_URL || '';
+const API_BASE_URL = window.QARZ_API_URL ||
+    (window.location.protocol === 'file:' ? 'http://localhost:3000' : '');
 
 // ==================== STATE ====================
 let appState = {
@@ -1025,11 +1026,12 @@ async function syncFromServer() {
 
 async function syncDataToServer(action = null) {
     try {
-        await fetch(`${API_BASE_URL}/api/sync`, {
+        const response = await fetch(`${API_BASE_URL}/api/sync`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ debtors: appState.debtors, action })
         });
+        if (!response.ok) throw new Error(`Server ${response.status}`);
     } catch (error) {
         console.info('Ma\'lumotlar serverga yuborilmadi:', error.message);
     }
@@ -1037,29 +1039,34 @@ async function syncDataToServer(action = null) {
 
 async function sendDebtorEvent(debtor, action) {
     try {
-        await fetch(`${API_BASE_URL}/api/debtors`, {
+        const response = await fetch(`${API_BASE_URL}/api/debtors`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ debtor, action })
         });
+        if (!response.ok) throw new Error(`Server ${response.status}`);
     } catch (error) {
-        console.info('Telegram serveri ulanmagan:', error.message);
+        console.error('Telegram bildirishnomasi yuborilmadi:', error.message);
+        showToast('Telegramga yuborishda xatolik', 'error');
     }
 }
 
 async function sendPaymentEvent(debtor) {
     try {
-        await fetch(`${API_BASE_URL}/api/payments`, {
+        const response = await fetch(`${API_BASE_URL}/api/payments`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
                 debtorId: debtor.id,
+                debtor,
                 payments: debtor.payments,
                 totalPaid: debtor.totalPaid,
                 status: debtor.status
             })
         });
+        if (!response.ok) throw new Error(`Server ${response.status}`);
     } catch (error) {
-        console.info('To\'lov Telegram serveriga yuborilmadi:', error.message);
+        console.error('To\'lov Telegramga yuborilmadi:', error.message);
+        showToast('Telegramga yuborishda xatolik', 'error');
     }
 }

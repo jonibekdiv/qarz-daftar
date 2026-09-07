@@ -185,12 +185,17 @@ app.post('/api/debtors', async (req, res) => {
 });
 
 app.post('/api/payments', async (req, res) => {
-    const debtor = state.debtors.find(item => item.id === req.body.debtorId);
-    if (!debtor) return res.status(404).json({ error: 'Qarzdor topilmadi.' });
+    const existingDebtor = state.debtors.find(item => item.id === req.body.debtorId);
+    const debtor = req.body.debtor || existingDebtor;
+    if (!debtor || !debtor.id || !debtor.fullName) {
+        return res.status(400).json({ error: 'To\'lov uchun qarzdor ma\'lumotlari topilmadi.' });
+    }
 
-    debtor.payments = Array.isArray(req.body.payments) ? req.body.payments : debtor.payments;
+    debtor.payments = Array.isArray(req.body.payments) ? req.body.payments : debtor.payments || [];
     debtor.totalPaid = Number(req.body.totalPaid || 0);
     debtor.status = req.body.status || debtor.status;
+    state.debtors = state.debtors.filter(item => item.id !== debtor.id);
+    state.debtors.push(debtor);
     await saveState();
     await notify('payment', debtor);
     res.json({ ok: true, debtor });
