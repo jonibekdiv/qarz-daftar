@@ -87,6 +87,9 @@ async function sendTelegramMessage(text) {
         const details = await response.text();
         throw new Error(`Telegram API xatosi: ${details}`);
     }
+
+    const result = await response.json();
+    return result.result;
 }
 
 function escapeHtml(value) {
@@ -127,7 +130,7 @@ function bulkUpdateMessage(action, count) {
 }
 
 async function notify(action, debtor) {
-    await sendTelegramMessage(debtorMessage(debtor, action));
+    return sendTelegramMessage(debtorMessage(debtor, action));
 }
 
 function normalizeDebtors(debtors) {
@@ -156,14 +159,17 @@ app.post('/api/sync', async (req, res) => {
     const debtors = normalizeDebtors(req.body.debtors);
     state.debtors = debtors;
     await saveState();
+    let telegramMessageId = null;
     if (req.body.action) {
         try {
-            await sendTelegramMessage(bulkUpdateMessage(req.body.action, debtors.length));
+            const telegramMessage = await sendTelegramMessage(bulkUpdateMessage(req.body.action, debtors.length));
+            telegramMessageId = telegramMessage.message_id;
         } catch (error) {
             console.error(error.message);
+            return res.status(502).json({ error: 'Telegramga xabar yuborilmadi.', details: error.message });
         }
     }
-    res.json({ ok: true, count: debtors.length });
+    res.json({ ok: true, telegramSent: Boolean(req.body.action), telegramMessageId, count: debtors.length });
 });
 
 app.post('/api/debtors', async (req, res) => {
@@ -174,14 +180,15 @@ app.post('/api/debtors', async (req, res) => {
 
     state.debtors = state.debtors.filter(item => item.id !== debtor.id);
     state.debtors.push(debtor);
+    let telegramMessage;
     await saveState();
     try {
-        await notify(req.body.action || 'created', debtor);
+        telegramMessage = await notify(req.body.action || 'created', debtor);
     } catch (error) {
         console.error('Telegram xabari yuborilmadi:', error.message);
         return res.status(502).json({ error: 'Telegramga xabar yuborilmadi.', details: error.message });
     }
-    res.status(201).json({ ok: true, debtor });
+    res.status(201).json({ ok: true, telegramSent: true, telegramMessageId: telegramMessage.message_id, debtor });
 });
 
 app.post('/api/payments', async (req, res) => {
@@ -196,14 +203,15 @@ app.post('/api/payments', async (req, res) => {
     debtor.status = req.body.status || debtor.status;
     state.debtors = state.debtors.filter(item => item.id !== debtor.id);
     state.debtors.push(debtor);
+    let telegramMessage;
     await saveState();
     try {
-        await notify('payment', debtor);
+        telegramMessage = await notify('payment', debtor);
     } catch (error) {
         console.error('Telegram to\'lov xabari yuborilmadi:', error.message);
         return res.status(502).json({ error: 'Telegramga to\'lov xabari yuborilmadi.', details: error.message });
     }
-    res.json({ ok: true, debtor });
+    res.json({ ok: true, telegramSent: true, telegramMessageId: telegramMessage.message_id, debtor });
 });
 
 app.delete('/api/debtors/:id', async (req, res) => {
@@ -211,14 +219,15 @@ app.delete('/api/debtors/:id', async (req, res) => {
     if (!debtor) return res.status(404).json({ error: 'Qarzdor topilmadi.' });
 
     state.debtors = state.debtors.filter(item => item.id !== req.params.id);
+    let telegramMessage;
     await saveState();
     try {
-        await notify('deleted', debtor);
+        telegramMessage = await notify('deleted', debtor);
     } catch (error) {
         console.error('Telegram o\'chirish xabari yuborilmadi:', error.message);
         return res.status(502).json({ error: 'Telegramga o\'chirish xabari yuborilmadi.', details: error.message });
     }
-    res.json({ ok: true });
+    res.json({ ok: true, telegramSent: true, telegramMessageId: telegramMessage.message_id });
 });
 
 async function checkReminders() {

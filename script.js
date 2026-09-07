@@ -1031,7 +1031,8 @@ async function syncDataToServer(action = null) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ debtors: appState.debtors, action })
         });
-        if (!response.ok) throw new Error(`Server ${response.status}`);
+        const result = await response.json();
+        if (!response.ok || (action && !result.telegramSent)) throw new Error(`Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.info('Ma\'lumotlar serverga yuborilmadi:', error.message);
     }
@@ -1044,7 +1045,8 @@ async function sendDebtorEvent(debtor, action) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ debtor, action })
         });
-        if (!response.ok) throw new Error(`Server ${response.status}`);
+        const result = await response.json();
+        if (!response.ok || !result.telegramSent) throw new Error(`Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.error('Telegram bildirishnomasi yuborilmadi:', error.message);
         showToast('Telegramga yuborishda xatolik', 'error');
@@ -1064,7 +1066,8 @@ async function sendPaymentEvent(debtor) {
                 status: debtor.status
             })
         });
-        if (!response.ok) throw new Error(`Server ${response.status}`);
+        const result = await response.json();
+        if (!response.ok || !result.telegramSent) throw new Error(`Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.error('To\'lov Telegramga yuborilmadi:', error.message);
         showToast('Telegramga yuborishda xatolik', 'error');
