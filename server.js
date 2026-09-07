@@ -9,7 +9,9 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = process.env.ADMIN_ID;
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.VERCEL
+    ? path.join('/tmp', 'qarz-daftari')
+    : path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'debtors.json');
 const REMINDER_INTERVAL_MS = Number(process.env.REMINDER_INTERVAL_MS || 3600000);
 
@@ -19,6 +21,20 @@ let writeQueue = Promise.resolve();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(__dirname));
+
+const stateReady = loadState().catch(error => {
+    console.error('Ma\'lumotlar bazasini yuklashda xatolik:', error);
+    throw error;
+});
+
+app.use(async (req, res, next) => {
+    try {
+        await stateReady;
+        next();
+    } catch (error) {
+        res.status(500).json({ error: 'Server ma\'lumotlarini yuklay olmadi.' });
+    }
+});
 
 async function loadState() {
     await fs.mkdir(DATA_DIR, { recursive: true });
@@ -127,6 +143,16 @@ app.get('/api/health', (req, res) => {
     res.json({ ok: true, telegramConfigured: telegramReady(), debtors: state.debtors.length });
 });
 
+app.get('/api/reminders', async (req, res) => {
+    try {
+        await checkReminders();
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Eslatmalar xatosi:', error.message);
+        res.status(500).json({ error: 'Eslatmalarni yuborishda xatolik.' });
+    }
+});
+
 app.get('/api/debtors', (req, res) => {
     res.json({ debtors: state.debtors });
 });
@@ -213,13 +239,12 @@ async function checkReminders() {
     }
 }
 
-loadState()
-    .then(() => {
+if (require.main === module) {
+    stateReady.then(() => {
         app.listen(PORT, () => console.log(`Qarz Daftari serveri http://localhost:${PORT} da ishlayapti`));
         checkReminders().catch(error => console.error('Eslatmalar xatosi:', error.message));
         setInterval(() => checkReminders().catch(error => console.error('Eslatmalar xatosi:', error.message)), REMINDER_INTERVAL_MS);
-    })
-    .catch(error => {
-        console.error('Ma\'lumotlar bazasini yuklashda xatolik:', error);
-        process.exit(1);
-    });
+    }).catch(() => process.exit(1));
+}
+
+module.exports = app;
