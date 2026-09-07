@@ -332,12 +332,12 @@ function openPaymentModal(debtorId) {
     document.getElementById('paymentAmount').max = remainingDebt;
     document.getElementById('paymentAmount').placeholder = `Maksimum: ${formatCurrency(remainingDebt)}`;
     
-    // Set today's date
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('paymentDate').value = today;
-    
     document.getElementById('paymentForm').reset();
     document.getElementById('paymentError').classList.remove('show');
+
+    // Reset first, then set today's date so the required field is never cleared.
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('paymentDate').value = today;
     
     modal.classList.add('active');
 }
