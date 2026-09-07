@@ -74,8 +74,7 @@ function telegramReady() {
 
 async function sendTelegramMessage(text) {
     if (!telegramReady()) {
-        console.warn('Telegram sozlanmagan: BOT_TOKEN yoki ADMIN_ID yetishmayapti.');
-        return;
+        throw new Error('Telegram sozlanmagan: BOT_TOKEN yoki ADMIN_ID yetishmayapti.');
     }
 
     const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -128,11 +127,7 @@ function bulkUpdateMessage(action, count) {
 }
 
 async function notify(action, debtor) {
-    try {
-        await sendTelegramMessage(debtorMessage(debtor, action));
-    } catch (error) {
-        console.error(error.message);
-    }
+    await sendTelegramMessage(debtorMessage(debtor, action));
 }
 
 function normalizeDebtors(debtors) {
@@ -180,7 +175,12 @@ app.post('/api/debtors', async (req, res) => {
     state.debtors = state.debtors.filter(item => item.id !== debtor.id);
     state.debtors.push(debtor);
     await saveState();
-    await notify(req.body.action || 'created', debtor);
+    try {
+        await notify(req.body.action || 'created', debtor);
+    } catch (error) {
+        console.error('Telegram xabari yuborilmadi:', error.message);
+        return res.status(502).json({ error: 'Telegramga xabar yuborilmadi.', details: error.message });
+    }
     res.status(201).json({ ok: true, debtor });
 });
 
@@ -197,7 +197,12 @@ app.post('/api/payments', async (req, res) => {
     state.debtors = state.debtors.filter(item => item.id !== debtor.id);
     state.debtors.push(debtor);
     await saveState();
-    await notify('payment', debtor);
+    try {
+        await notify('payment', debtor);
+    } catch (error) {
+        console.error('Telegram to\'lov xabari yuborilmadi:', error.message);
+        return res.status(502).json({ error: 'Telegramga to\'lov xabari yuborilmadi.', details: error.message });
+    }
     res.json({ ok: true, debtor });
 });
 
@@ -207,7 +212,12 @@ app.delete('/api/debtors/:id', async (req, res) => {
 
     state.debtors = state.debtors.filter(item => item.id !== req.params.id);
     await saveState();
-    await notify('deleted', debtor);
+    try {
+        await notify('deleted', debtor);
+    } catch (error) {
+        console.error('Telegram o\'chirish xabari yuborilmadi:', error.message);
+        return res.status(502).json({ error: 'Telegramga o\'chirish xabari yuborilmadi.', details: error.message });
+    }
     res.json({ ok: true });
 });
 
@@ -246,7 +256,15 @@ async function checkReminders() {
 
 if (require.main === module) {
     stateReady.then(() => {
-        app.listen(PORT, () => console.log(`Qarz Daftari serveri http://localhost:${PORT} da ishlayapti`));
+        const server = app.listen(PORT, () => console.log(`Qarz Daftari serveri http://localhost:${PORT} da ishlayapti`));
+        server.on('error', error => {
+            if (error.code === 'EADDRINUSE') {
+                console.log(`Qarz Daftari serveri allaqachon http://localhost:${PORT} da ishlayapti.`);
+                process.exit(0);
+            }
+            console.error('Serverni ishga tushirishda xatolik:', error.message);
+            process.exit(1);
+        });
         checkReminders().catch(error => console.error('Eslatmalar xatosi:', error.message));
         setInterval(() => checkReminders().catch(error => console.error('Eslatmalar xatosi:', error.message)), REMINDER_INTERVAL_MS);
     }).catch(() => process.exit(1));
