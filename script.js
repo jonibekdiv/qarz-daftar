@@ -1031,7 +1031,7 @@ async function syncDataToServer(action = null) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ debtors: appState.debtors, action })
         });
-        const result = await response.json();
+        const result = await readApiResponse(response);
         if (!response.ok || (action && !result.telegramSent)) throw new Error(`Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.info('Ma\'lumotlar serverga yuborilmadi:', error.message);
@@ -1045,7 +1045,7 @@ async function sendDebtorEvent(debtor, action) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ debtor, action })
         });
-        const result = await response.json();
+        const result = await readApiResponse(response);
         if (!response.ok || !result.telegramSent) throw new Error(result.details || `Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.error('Telegram bildirishnomasi yuborilmadi:', error.message);
@@ -1066,10 +1066,21 @@ async function sendPaymentEvent(debtor) {
                 status: debtor.status
             })
         });
-        const result = await response.json();
+        const result = await readApiResponse(response);
         if (!response.ok || !result.telegramSent) throw new Error(result.details || `Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.error('To\'lov Telegramga yuborilmadi:', error.message);
         showToast(`Telegram xatosi: ${error.message}`, 'error');
+    }
+}
+
+async function readApiResponse(response) {
+    const text = await response.text();
+    if (!text.trim()) return {};
+
+    try {
+        return JSON.parse(text);
+    } catch (error) {
+        throw new Error(`Server ${response.status}: ${text.slice(0, 120)}`);
     }
 }
