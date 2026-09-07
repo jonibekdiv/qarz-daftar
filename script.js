@@ -1046,10 +1046,10 @@ async function sendDebtorEvent(debtor, action) {
             body: JSON.stringify({ debtor, action })
         });
         const result = await response.json();
-        if (!response.ok || !result.telegramSent) throw new Error(`Telegram yuborilmadi (server ${response.status})`);
+        if (!response.ok || !result.telegramSent) throw new Error(result.details || `Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.error('Telegram bildirishnomasi yuborilmadi:', error.message);
-        showToast('Telegramga yuborishda xatolik', 'error');
+        showToast(`Telegram xatosi: ${error.message}`, 'error');
     }
 }
 
@@ -1067,9 +1067,9 @@ async function sendPaymentEvent(debtor) {
             })
         });
         const result = await response.json();
-        if (!response.ok || !result.telegramSent) throw new Error(`Telegram yuborilmadi (server ${response.status})`);
+        if (!response.ok || !result.telegramSent) throw new Error(result.details || `Telegram yuborilmadi (server ${response.status})`);
     } catch (error) {
         console.error('To\'lov Telegramga yuborilmadi:', error.message);
-        showToast('Telegramga yuborishda xatolik', 'error');
+        showToast(`Telegram xatosi: ${error.message}`, 'error');
     }
 }

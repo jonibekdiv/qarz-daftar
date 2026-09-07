@@ -77,19 +77,28 @@ async function sendTelegramMessage(text) {
         throw new Error('Telegram sozlanmagan: BOT_TOKEN yoki ADMIN_ID yetishmayapti.');
     }
 
-    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ chat_id: ADMIN_ID, text, parse_mode: 'HTML' })
-    });
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+            const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ chat_id: ADMIN_ID, text, parse_mode: 'HTML' }),
+                signal: AbortSignal.timeout(10000)
+            });
 
-    if (!response.ok) {
-        const details = await response.text();
-        throw new Error(`Telegram API xatosi: ${details}`);
+            const result = await response.json();
+            if (!response.ok || !result.ok) {
+                throw new Error(result.description || `HTTP ${response.status}`);
+            }
+            return result.result;
+        } catch (error) {
+            lastError = error;
+            if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 500));
+        }
     }
 
-    const result = await response.json();
-    return result.result;
+    throw new Error(`Telegram API xatosi: ${lastError.message}`);
 }
 
 function escapeHtml(value) {
