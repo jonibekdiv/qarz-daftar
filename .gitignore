@@ -1,0 +1,5 @@
+node_modules/
+.env
+data/debtors.json
+npm-debug.log*
+.env.example

@@ -1,0 +1,225 @@
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs/promises');
+const path = require('path');
+
+const app = express();
+const PORT = Number(process.env.PORT || 3000);
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const ADMIN_ID = process.env.ADMIN_ID;
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'debtors.json');
+const REMINDER_INTERVAL_MS = Number(process.env.REMINDER_INTERVAL_MS || 3600000);
+
+let state = { debtors: [], sentReminders: {} };
+let writeQueue = Promise.resolve();
+
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+app.use(express.static(__dirname));
+
+async function loadState() {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    try {
+        state = JSON.parse(await fs.readFile(DATA_FILE, 'utf8'));
+        state.debtors = Array.isArray(state.debtors) ? state.debtors : [];
+        state.sentReminders = state.sentReminders || {};
+    } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        await saveState();
+    }
+}
+
+function saveState() {
+    const snapshot = JSON.stringify(state, null, 2);
+    writeQueue = writeQueue.then(() => fs.writeFile(DATA_FILE, snapshot, 'utf8'));
+    return writeQueue;
+}
+
+function money(value) {
+    return new Intl.NumberFormat('uz-UZ').format(Math.round(Number(value) || 0)) + " so'm";
+}
+
+function dateText(value) {
+    if (!value) return 'ko\'rsatilmagan';
+    return new Intl.DateTimeFormat('uz-UZ', { year: 'numeric', month: 'long', day: 'numeric' })
+        .format(new Date(`${value}T00:00:00`));
+}
+
+function remaining(debtor) {
+    return Math.max(Number(debtor.amount || 0) - Number(debtor.totalPaid || 0), 0);
+}
+
+function telegramReady() {
+    return Boolean(BOT_TOKEN && ADMIN_ID);
+}
+
+async function sendTelegramMessage(text) {
+    if (!telegramReady()) {
+        console.warn('Telegram sozlanmagan: BOT_TOKEN yoki ADMIN_ID yetishmayapti.');
+        return;
+    }
+
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ chat_id: ADMIN_ID, text, parse_mode: 'HTML' })
+    });
+
+    if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Telegram API xatosi: ${details}`);
+    }
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
+function debtorMessage(debtor, action) {
+    const title = action === 'created' ? 'Yangi qarzdor qo\'shildi' :
+        action === 'updated' ? 'Qarzdor ma\'lumotlari yangilandi' :
+        action === 'payment' ? 'Yangi to\'lov qo\'shildi' : 'Qarzdor o\'chirildi';
+
+    return [
+        `<b>${title}</b>`,
+        `👤 <b>Ism:</b> ${escapeHtml(debtor.fullName)}`,
+        `📞 <b>Telefon:</b> ${escapeHtml(debtor.phone)}`,
+        `💰 <b>Qarz:</b> ${money(debtor.amount)}`,
+        `✅ <b>To\'langan:</b> ${money(debtor.totalPaid)}`,
+        `📊 <b>Qolgan:</b> ${money(remaining(debtor))}`,
+        `📅 <b>Muddat:</b> ${dateText(debtor.dueDate)}`
+    ].join('\n');
+}
+
+function bulkUpdateMessage(action, count) {
+    const title = action === 'imported' ? 'Ma\'lumotlar import qilindi' :
+        action === 'demo' ? 'Demo ma\'lumotlar qo\'shildi' :
+        action === 'cleared' ? 'Barcha qarzlar o\'chirildi' : 'Ma\'lumotlar yangilandi';
+
+    return [
+        `<b>${title}</b>`,
+        `📊 Jami yozuvlar: <b>${count}</b>`,
+        `🕒 Vaqt: ${new Date().toLocaleString('uz-UZ')}`
+    ].join('\n');
+}
+
+async function notify(action, debtor) {
+    try {
+        await sendTelegramMessage(debtorMessage(debtor, action));
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+function normalizeDebtors(debtors) {
+    return Array.isArray(debtors) ? debtors.filter(item => item && item.id && item.fullName) : [];
+}
+
+app.get('/api/health', (req, res) => {
+    res.json({ ok: true, telegramConfigured: telegramReady(), debtors: state.debtors.length });
+});
+
+app.get('/api/debtors', (req, res) => {
+    res.json({ debtors: state.debtors });
+});
+
+app.post('/api/sync', async (req, res) => {
+    const debtors = normalizeDebtors(req.body.debtors);
+    state.debtors = debtors;
+    await saveState();
+    if (req.body.action) {
+        try {
+            await sendTelegramMessage(bulkUpdateMessage(req.body.action, debtors.length));
+        } catch (error) {
+            console.error(error.message);
+        }
+    }
+    res.json({ ok: true, count: debtors.length });
+});
+
+app.post('/api/debtors', async (req, res) => {
+    const debtor = req.body.debtor;
+    if (!debtor || !debtor.id || !debtor.fullName) {
+        return res.status(400).json({ error: 'Qarzdor ma\'lumotlari noto\'g\'ri.' });
+    }
+
+    state.debtors = state.debtors.filter(item => item.id !== debtor.id);
+    state.debtors.push(debtor);
+    await saveState();
+    await notify(req.body.action || 'created', debtor);
+    res.status(201).json({ ok: true, debtor });
+});
+
+app.post('/api/payments', async (req, res) => {
+    const debtor = state.debtors.find(item => item.id === req.body.debtorId);
+    if (!debtor) return res.status(404).json({ error: 'Qarzdor topilmadi.' });
+
+    debtor.payments = Array.isArray(req.body.payments) ? req.body.payments : debtor.payments;
+    debtor.totalPaid = Number(req.body.totalPaid || 0);
+    debtor.status = req.body.status || debtor.status;
+    await saveState();
+    await notify('payment', debtor);
+    res.json({ ok: true, debtor });
+});
+
+app.delete('/api/debtors/:id', async (req, res) => {
+    const debtor = state.debtors.find(item => item.id === req.params.id);
+    if (!debtor) return res.status(404).json({ error: 'Qarzdor topilmadi.' });
+
+    state.debtors = state.debtors.filter(item => item.id !== req.params.id);
+    await saveState();
+    await notify('deleted', debtor);
+    res.json({ ok: true });
+});
+
+async function checkReminders() {
+    if (!telegramReady()) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const debtor of state.debtors) {
+        if (!debtor.dueDate || debtor.status === 'completed' || remaining(debtor) <= 0) continue;
+
+        const due = new Date(`${debtor.dueDate}T00:00:00`);
+        const daysLeft = Math.ceil((due - today) / 86400000);
+        let type = null;
+        if (daysLeft === 1) type = 'tomorrow';
+        if (daysLeft === 0) type = 'today';
+        if (daysLeft < 0) type = 'overdue';
+        if (!type) continue;
+
+        const reminderKey = `${debtor.id}:${type}:${debtor.dueDate}`;
+        if (state.sentReminders[reminderKey]) continue;
+
+        const label = type === 'overdue' ? `${Math.abs(daysLeft)} kun muddati o'tgan` :
+            type === 'today' ? 'bugun qaytarilishi kerak' : 'ertaga qaytarilishi kerak';
+        await sendTelegramMessage([
+            '<b>Qarz eslatmasi</b>',
+            `👤 ${escapeHtml(debtor.fullName)}`,
+            `💰 Qolgan qarz: ${money(remaining(debtor))}`,
+            `⏰ ${label}`
+        ].join('\n'));
+        state.sentReminders[reminderKey] = new Date().toISOString();
+        await saveState();
+    }
+}
+
+loadState()
+    .then(() => {
+        app.listen(PORT, () => console.log(`Qarz Daftari serveri http://localhost:${PORT} da ishlayapti`));
+        checkReminders().catch(error => console.error('Eslatmalar xatosi:', error.message));
+        setInterval(() => checkReminders().catch(error => console.error('Eslatmalar xatosi:', error.message)), REMINDER_INTERVAL_MS);
+    })
+    .catch(error => {
+        console.error('Ma\'lumotlar bazasini yuklashda xatolik:', error);
+        process.exit(1);
+    });
