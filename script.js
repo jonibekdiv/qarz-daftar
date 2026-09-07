@@ -1,8 +1,9 @@
 // ==================== STORAGE KEY ====================
 const STORAGE_KEY = 'qarz_daftari_data';
 const THEME_KEY = 'qarz_daftari_theme';
+const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const API_BASE_URL = window.QARZ_API_URL ||
-    (window.location.protocol === 'file:' ? 'http://localhost:3000' : '');
+    (window.location.protocol === 'file:' || isLocalHost ? 'http://localhost:3000' : '');
 
 // ==================== STATE ====================
 let appState = {
