@@ -19,7 +19,7 @@ let state = { debtors: [], sentReminders: {} };
 let writeQueue = Promise.resolve();
 
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
 app.use(express.static(__dirname));
 
 const stateReady = loadState().catch(error => {
@@ -61,7 +61,7 @@ function money(value) {
 function dateText(value) {
     if (!value) return 'ko\'rsatilmagan';
     return new Intl.DateTimeFormat('uz-UZ', { year: 'numeric', month: 'long', day: 'numeric' })
-        .format(new Date(`${value}T00:00:00`));
+        .format(new Date(value + 'T12:00:00'));
 }
 
 function remaining(debtor) {
@@ -115,14 +115,23 @@ function debtorMessage(debtor, action) {
         action === 'updated' ? 'Qarzdor ma\'lumotlari yangilandi' :
         action === 'payment' ? 'Yangi to\'lov qo\'shildi' : 'Qarzdor o\'chirildi';
 
+    const payments = Array.isArray(debtor.payments) ? debtor.payments : [];
+    const paymentLines = payments.length
+        ? payments.slice(-5).map((payment, index) =>
+            `${index + 1}. ${dateText(payment.date)} - ${money(payment.amount)} (${escapeHtml(payment.method || 'ko\'rsatilmagan')})`)
+        : ['Hozircha to\'lov kiritilmagan'];
+
     return [
         `<b>${title}</b>`,
-        `👤 <b>Ism:</b> ${escapeHtml(debtor.fullName)}`,
-        `📞 <b>Telefon:</b> ${escapeHtml(debtor.phone)}`,
-        `💰 <b>Qarz:</b> ${money(debtor.amount)}`,
-        `✅ <b>To\'langan:</b> ${money(debtor.totalPaid)}`,
-        `📊 <b>Qolgan:</b> ${money(remaining(debtor))}`,
-        `📅 <b>Muddat:</b> ${dateText(debtor.dueDate)}`
+        `<b>Ism:</b> ${escapeHtml(debtor.fullName)}`,
+        `<b>Telefon:</b> ${escapeHtml(debtor.phone)}`,
+        `<b>Berilgan summa:</b> ${money(debtor.amount)}`,
+        `<b>Jami to\'langan:</b> ${money(debtor.totalPaid)}`,
+        `<b>Qolgan qarz:</b> ${money(remaining(debtor))}`,
+        `<b>Berilgan sana:</b> ${dateText(debtor.loanDate)}`,
+        `<b>To\'lash muddati:</b> ${dateText(debtor.dueDate)}`,
+        `<b>To\'lovlar tarixi:</b>`,
+        ...paymentLines
     ].join('\n');
 }
 
@@ -144,6 +153,19 @@ async function notify(action, debtor) {
 
 function normalizeDebtors(debtors) {
     return Array.isArray(debtors) ? debtors.filter(item => item && item.id && item.fullName) : [];
+}
+
+function validateDebtor(debtor) {
+    const errors = [];
+    if (!debtor.fullName || debtor.fullName.length < 3)
+        errors.push('Ism kamida 3 ta harf bo\'lishi kerak');
+    if (!debtor.phone || debtor.phone.replace(/\D/g, '').length < 9)
+        errors.push('Telefon noto\'g\'ri');
+    if (debtor.amount <= 0)
+        errors.push('Summa 0 dan katta bo\'lishi kerak');
+    if (debtor.loanDate && debtor.dueDate && new Date(debtor.loanDate) > new Date(debtor.dueDate))
+        errors.push('Muddati qarz sanasidan keyin bo\'lsin');
+    return errors.length === 0 ? null : errors;
 }
 
 app.get('/api/health', (req, res) => {
@@ -185,6 +207,11 @@ app.post('/api/debtors', async (req, res) => {
     const debtor = req.body.debtor;
     if (!debtor || !debtor.id || !debtor.fullName) {
         return res.status(400).json({ error: 'Qarzdor ma\'lumotlari noto\'g\'ri.' });
+    }
+
+    const validationErrors = validateDebtor(debtor);
+    if (validationErrors) {
+        return res.status(400).json({ error: validationErrors });
     }
 
     state.debtors = state.debtors.filter(item => item.id !== debtor.id);
@@ -248,7 +275,7 @@ async function checkReminders() {
     for (const debtor of state.debtors) {
         if (!debtor.dueDate || debtor.status === 'completed' || remaining(debtor) <= 0) continue;
 
-        const due = new Date(`${debtor.dueDate}T00:00:00`);
+        const due = new Date(`${debtor.dueDate}T12:00:00`);
         const daysLeft = Math.ceil((due - today) / 86400000);
         let type = null;
         if (daysLeft === 1) type = 'tomorrow';
@@ -263,9 +290,11 @@ async function checkReminders() {
             type === 'today' ? 'bugun qaytarilishi kerak' : 'ertaga qaytarilishi kerak';
         await sendTelegramMessage([
             '<b>Qarz eslatmasi</b>',
-            `👤 ${escapeHtml(debtor.fullName)}`,
-            `💰 Qolgan qarz: ${money(remaining(debtor))}`,
-            `⏰ ${label}`
+            `<b>Ism:</b> ${escapeHtml(debtor.fullName)}`,
+            `<b>Telefon:</b> ${escapeHtml(debtor.phone)}`,
+            `<b>Qolgan qarz:</b> ${money(remaining(debtor))}`,
+            `<b>Muddat:</b> ${dateText(debtor.dueDate)}`,
+            `<b>Holat:</b> ${label}`
         ].join('\n'));
         state.sentReminders[reminderKey] = new Date().toISOString();
         await saveState();

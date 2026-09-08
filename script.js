@@ -1,394 +1,162 @@
-// ==================== STORAGE KEY ====================
+// ============================================================
+//  QARZ DAFTARI – BARCHA FUNKSIYALAR
+// ============================================================
+
+// ---------- O'ZGARUVCHILAR ----------
 const STORAGE_KEY = 'qarz_daftari_data';
 const THEME_KEY = 'qarz_daftari_theme';
-const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const API_BASE_URL = window.QARZ_API_URL ||
-    (window.location.protocol === 'file:' || isLocalHost ? 'http://localhost:3000' : '');
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
 
-// ==================== STATE ====================
-let appState = {
-    debtors: [],
-    currentEditId: null,
-    currentDebtorId: null,
-    searchTerm: '',
-    filterType: 'all',
-    sortBy: 'newest'
-};
+let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTerm: '', filterType: 'all', sortBy: 'newest' };
+let searchTimeout = null;
+let chartStatus = null, chartMonthly = null;
 
-// ==================== INITIALIZATION ====================
+// ---------- BOSHLANG'ICH ----------
 document.addEventListener('DOMContentLoaded', () => {
-    initializeApp();
-});
-
-function initializeApp() {
     loadTheme();
-    loadDataFromStorage();
-    attachEventListeners();
-    updateDashboard();
+    loadData();
+    updateUI();
     renderDebtors();
     setDefaultDates();
     syncFromServer();
-}
-
-// ==================== THEME MANAGEMENT ====================
-function loadTheme() {
-    const savedTheme = localStorage.getItem(THEME_KEY) || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    updateThemeIcon(savedTheme);
-}
-
-function updateThemeIcon(theme) {
-    const sunIcon = document.getElementById('sunIcon');
-    const moonIcon = document.getElementById('moonIcon');
-    
-    if (theme === 'dark') {
-        sunIcon.style.display = 'none';
-        moonIcon.style.display = 'block';
-    } else {
-        sunIcon.style.display = 'block';
-        moonIcon.style.display = 'none';
-    }
-}
-
-document.getElementById('themeToggle').addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-    
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem(THEME_KEY, newTheme);
-    updateThemeIcon(newTheme);
-    showToast('Tema o\'zgartirildi', 'success');
+    if (window.lucide) window.lucide.createIcons();
 });
 
-// ==================== STORAGE MANAGEMENT ====================
-function loadDataFromStorage() {
-    try {
-        const data = localStorage.getItem(STORAGE_KEY);
-        if (data) {
-            appState.debtors = JSON.parse(data);
-        }
-    } catch (error) {
-        console.error('Ma\'lumotlar yuklanishda xatolik:', error);
-        showToast('Ma\'lumotlarni yuklashda xatolik', 'error');
+// ---------- THEMA ----------
+function loadTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (!saved) {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        localStorage.setItem(THEME_KEY, prefersDark ? 'dark' : 'light');
+    } else {
+        document.documentElement.setAttribute('data-theme', saved);
     }
 }
+document.getElementById('themeToggle').addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem(THEME_KEY, next);
+    updateCharts();
+    showToast('Tema o\'zgartirildi 🌓', 'success');
+});
 
-function saveDataToStorage() {
+// ---------- LOCALSTORAGE ----------
+function loadData() {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState.debtors));
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            state.debtors = Array.isArray(parsed) ? parsed : [];
+        }
+    } catch (e) { console.warn('Yuklash xatosi:', e); }
+}
+
+function saveData() {
+    try {
+        const data = JSON.stringify(state.debtors);
+        const sizeMB = new Blob([data]).size / (1024 * 1024);
+        if (sizeMB > 4) {
+            showToast('⚠️ Ma\'lumotlar juda katta! Qadimgilarini o\'chiring.', 'error');
+            return false;
+        }
+        localStorage.setItem(STORAGE_KEY, data);
         return true;
-    } catch (error) {
-        console.error('Ma\'lumotlarni saqlashda xatolik:', error);
-        showToast('Ma\'lumotlarni saqlashda xatolik', 'error');
+    } catch (e) {
+        showToast('Xotira to\'lib ketdi!', 'error');
         return false;
     }
 }
 
-// ==================== EVENT LISTENERS ====================
-function attachEventListeners() {
-    // Debtor Modal
-    document.getElementById('fabBtn').addEventListener('click', () => openDebtorModal());
-    document.getElementById('modalCloseBtn').addEventListener('click', closeDebtorModal);
-    document.getElementById('cancelBtn').addEventListener('click', closeDebtorModal);
-    document.getElementById('debtorForm').addEventListener('submit', saveDebtor);
-    document.getElementById('phone').addEventListener('input', (e) => {
-        e.target.value = formatPhoneNumber(e.target.value);
-    });
-    
-    // Payment Modal
-    document.getElementById('paymentCloseBtn').addEventListener('click', closePaymentModal);
-    document.getElementById('paymentCancelBtn').addEventListener('click', closePaymentModal);
-    document.getElementById('paymentForm').addEventListener('submit', addPayment);
-    
-    // Details Modal
-    document.getElementById('detailsCloseBtn').addEventListener('click', closeDetailsModal);
-    
-    // Settings Modal
-    document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
-    document.getElementById('settingsCloseBtn').addEventListener('click', closeSettingsModal);
-    
-    // Confirmation Modal
-    document.getElementById('confirmCancelBtn').addEventListener('click', closeConfirmModal);
-    
-    // Search & Filter
-    document.getElementById('searchInput').addEventListener('input', (e) => {
-        appState.searchTerm = e.target.value;
-        renderDebtors();
-    });
-    
-    // Filter Buttons
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
-            appState.filterType = e.target.dataset.filter;
-            renderDebtors();
-        });
-    });
-    
-    // Sort Buttons
-    document.querySelectorAll('.sort-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
-            appState.sortBy = e.target.dataset.sort;
-            renderDebtors();
-        });
-    });
-    
-    // Bottom Navigation
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            e.currentTarget.classList.add('active');
-            const page = e.currentTarget.dataset.page;
-            handlePageNavigation(page);
-        });
-    });
-    
-    // Settings Buttons
-    document.getElementById('exportBtn').addEventListener('click', exportData);
-    document.getElementById('importBtn').addEventListener('click', () => {
-        document.getElementById('fileInput').click();
-    });
-    document.getElementById('fileInput').addEventListener('change', importData);
-    document.getElementById('addDemoBtn').addEventListener('click', addDemoData);
-    document.getElementById('clearAllBtn').addEventListener('click', () => {
-        showConfirmation(
-            'Barcha Ma\'lumotlarni O\'chirish',
-            'Siz haqiqatan ham barcha ma\'lumotlarni o\'chirmoqchimisiz? Bu amalni qaytarish mumkin emas.',
-            () => clearAllData()
-        );
-    });
-    
-    // Modal Overlay Click
-    document.querySelectorAll('.modal-overlay').forEach(overlay => {
-        overlay.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal-overlay')) {
-                e.target.parentElement.classList.remove('active');
-            }
-        });
-    });
-    
-    // Keyboard Events
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeAllModals();
-        }
-    });
-}
-
-// ==================== MODALS ====================
-function openDebtorModal(debtorId = null) {
-    const modal = document.getElementById('debtorModal');
-    const form = document.getElementById('debtorForm');
-    const modalTitle = document.getElementById('modalTitle');
-    
-    appState.currentEditId = debtorId;
-    
-    form.reset();
-    clearAllErrors();
-    
-    if (debtorId) {
-        const debtor = appState.debtors.find(d => d.id === debtorId);
-        if (debtor) {
-            modalTitle.textContent = 'Qarzdorni Tahrirlash';
-            document.getElementById('fullName').value = debtor.fullName;
-            document.getElementById('phone').value = debtor.phone;
-            document.getElementById('address').value = debtor.address;
-            document.getElementById('amount').value = debtor.amount;
-            document.getElementById('loanDate').value = debtor.loanDate;
-            document.getElementById('dueDate').value = debtor.dueDate;
-            document.getElementById('status').value = debtor.status;
-            document.getElementById('notes').value = debtor.notes;
-        }
-    } else {
-        modalTitle.textContent = 'Yangi Qarzdor Qo\'shish';
-        setDefaultDates();
-        if (!document.getElementById('loanDate').value || !document.getElementById('dueDate').value) {
-            setDefaultDates();
-        }
-    }
-    
-    modal.classList.add('active');
-}
-
-function closeDebtorModal() {
-    document.getElementById('debtorModal').classList.remove('active');
-    appState.currentEditId = null;
-}
-
-function openDetailsModal(debtorId) {
-    const debtor = appState.debtors.find(d => d.id === debtorId);
-    if (!debtor) return;
-    
-    appState.currentDebtorId = debtorId;
-    const modal = document.getElementById('detailsModal');
-    const detailsTitle = document.getElementById('detailsTitle');
-    const detailsContent = document.getElementById('detailsContent');
-    
-    detailsTitle.textContent = debtor.fullName;
-    
-    let remainingDebt = debtor.amount - debtor.totalPaid;
-    if (remainingDebt < 0) remainingDebt = 0;
-    
-    let html = `
-        <div class="detail-section">
-            <div class="detail-row">
-                <span class="detail-label">Telefon:</span>
-                <span class="detail-value"><a href="tel:${debtor.phone}" style="color: var(--color-blue); text-decoration: none;">${debtor.phone}</a></span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Manzil:</span>
-                <span class="detail-value">${debtor.address || 'Ko\'rsatilmagan'}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Holati:</span>
-                <span class="detail-value">${getStatusText(debtor.status)}</span>
-            </div>
-        </div>
-        
-        <div class="detail-section">
-            <h3 style="margin-bottom: 12px; font-weight: 700;">Qarz Ma\'lumotlari</h3>
-            <div class="detail-row">
-                <span class="detail-label">Berilgan Qarz:</span>
-                <span class="detail-value">${formatCurrency(debtor.amount)}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Qarz Sanasi:</span>
-                <span class="detail-value">${formatDate(debtor.loanDate)}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Qaytarish Muddati:</span>
-                <span class="detail-value">${formatDate(debtor.dueDate)}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Jami To\'langan:</span>
-                <span class="detail-value" style="color: var(--color-green);">${formatCurrency(debtor.totalPaid)}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Qolgan Qarz:</span>
-                <span class="detail-value" style="color: ${remainingDebt > 0 ? 'var(--color-red)' : 'var(--color-green)'};">${formatCurrency(remainingDebt)}</span>
-            </div>
-    `;
-    
-    if (debtor.notes) {
-        html += `
-            <div class="detail-row">
-                <span class="detail-label">Izoh:</span>
-                <span class="detail-value">${debtor.notes}</span>
-            </div>
-        `;
-    }
-    
-    html += '</div>';
-    
-    if (debtor.payments && debtor.payments.length > 0) {
-        html += `
-            <div class="detail-section">
-                <h3 style="margin-bottom: 12px; font-weight: 700;">To\'lovlar Tarixi</h3>
-                <div class="payment-history">
-        `;
-        
-        debtor.payments.forEach(payment => {
-            html += `
-                <div class="payment-item">
-                    <div>
-                        <div class="payment-date">${formatDate(payment.date)}</div>
-                        <div style="font-size: 12px; color: var(--text-tertiary);">${payment.method || 'Naqd'}</div>
-                    </div>
-                    <span class="payment-amount">${formatCurrency(payment.amount)}</span>
-                </div>
-            `;
-        });
-        
-        html += '</div></div>';
-    }
-    
-    html += `
-        <div style="display: flex; gap: 8px; margin-top: var(--spacing-md);">
-            <button class="btn btn-primary" style="flex: 1;" onclick="openPaymentModal('${debtorId}')">To\'lov Qo\'shish</button>
-            <button class="btn btn-secondary" style="flex: 1;" onclick="openDebtorModal('${debtorId}')">Tahrirlash</button>
-            <button class="btn btn-danger" style="flex: 1;" onclick="deleteDebtorConfirm('${debtorId}')">O\'chirish</button>
-        </div>
-    `;
-    
-    detailsContent.innerHTML = html;
-    modal.classList.add('active');
-}
-
-function closeDetailsModal() {
-    document.getElementById('detailsModal').classList.remove('active');
-    appState.currentDebtorId = null;
-}
-
-function openPaymentModal(debtorId) {
-    const debtor = appState.debtors.find(d => d.id === debtorId);
-    if (!debtor) return;
-    
-    appState.currentDebtorId = debtorId;
-    const modal = document.getElementById('paymentModal');
-    
-    const remainingDebt = debtor.amount - debtor.totalPaid;
-    document.getElementById('paymentAmount').max = remainingDebt;
-    document.getElementById('paymentAmount').placeholder = `Maksimum: ${formatCurrency(remainingDebt)}`;
-    
-    document.getElementById('paymentForm').reset();
-    document.getElementById('paymentError').classList.remove('show');
-
-    // Reset first, then set today's date so the required field is never cleared.
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('paymentDate').value = today;
-    
-    modal.classList.add('active');
-}
-
-function closePaymentModal() {
-    document.getElementById('paymentModal').classList.remove('active');
-    appState.currentDebtorId = null;
-}
-
-function openSettingsModal() {
-    document.getElementById('settingsModal').classList.add('active');
-}
-
-function closeSettingsModal() {
-    document.getElementById('settingsModal').classList.remove('active');
-}
-
-function closeConfirmModal() {
-    document.getElementById('confirmModal').classList.remove('active');
-}
-
-function closeAllModals() {
-    document.querySelectorAll('.modal').forEach(modal => {
-        modal.classList.remove('active');
-    });
-}
-
-// ==================== CONFIRMATION DIALOG ====================
-function showConfirmation(title, message, onConfirm) {
-    const modal = document.getElementById('confirmModal');
-    document.getElementById('confirmTitle').textContent = title;
-    document.getElementById('confirmMessage').textContent = message;
-    
-    document.getElementById('confirmYesBtn').onclick = () => {
-        onConfirm();
-        closeConfirmModal();
-    };
-    
-    modal.classList.add('active');
-}
-
-// ==================== DEBTOR CRUD ====================
+// ---------- GENERATSIYA ----------
 function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-function saveDebtor(e) {
+// ---------- FORMATLASH ----------
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('uz-UZ').format(Math.round(amount || 0)) + ' so\'m';
+}
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T12:00:00');
+    return new Intl.DateTimeFormat('uz-UZ', { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+}
+function getDaysLeft(dueDate) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const due = new Date(dueDate + 'T12:00:00');
+    return Math.ceil((due - today) / 86400000);
+}
+function formatPhone(raw) {
+    let digits = raw.replace(/\D/g, '');
+    if (digits.startsWith('998')) digits = digits.slice(3);
+    digits = digits.slice(0, 9);
+    const parts = [];
+    if (digits.length > 0) parts.push(digits.slice(0,2));
+    if (digits.length > 2) parts.push(digits.slice(2,5));
+    if (digits.length > 5) parts.push(digits.slice(5,7));
+    if (digits.length > 7) parts.push(digits.slice(7,9));
+    return '+998 ' + parts.join(' ');
+}
+
+// ---------- TOAST ----------
+function showToast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ---------- DEFAULTS ----------
+function setDefaultDates() {
+    const now = new Date();
+    const later = new Date(now); later.setDate(later.getDate() + 30);
+    const fmt = d => d.toISOString().split('T')[0];
+    document.getElementById('loanDate').value = fmt(now);
+    document.getElementById('dueDate').value = fmt(later);
+    document.getElementById('paymentDate').value = fmt(now);
+}
+
+// ---------- MODALLAR ----------
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+function closeAllModals() {
+    document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+}
+
+// ---------- QARZDOR MODAL ----------
+function openDebtorModal(editId = null) {
+    state.currentEditId = editId;
+    const form = document.getElementById('debtorForm');
+    form.reset();
+    document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
+    document.getElementById('modalTitle').textContent = editId ? '✏️ Qarzdorni tahrirlash' : '➕ Yangi qarzdor';
+    setDefaultDates();
+
+    if (editId) {
+        const d = state.debtors.find(x => x.id === editId);
+        if (d) {
+            document.getElementById('fullName').value = d.fullName || '';
+            document.getElementById('phone').value = d.phone || '';
+            document.getElementById('address').value = d.address || '';
+            document.getElementById('amount').value = d.amount || '';
+            document.getElementById('loanDate').value = d.loanDate || '';
+            document.getElementById('dueDate').value = d.dueDate || '';
+            document.getElementById('status').value = d.status || 'active';
+            document.getElementById('notes').value = d.notes || '';
+        }
+    }
+    openModal('debtorModal');
+}
+
+document.getElementById('modalCloseBtn').addEventListener('click', () => closeModal('debtorModal'));
+document.getElementById('cancelBtn').addEventListener('click', () => closeModal('debtorModal'));
+
+document.getElementById('debtorForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    
-    const fullName = document.getElementById('fullName').value.trim();
+    const name = document.getElementById('fullName').value.trim();
     const phone = document.getElementById('phone').value.trim();
     const address = document.getElementById('address').value.trim();
     const amount = parseFloat(document.getElementById('amount').value);
@@ -396,692 +164,711 @@ function saveDebtor(e) {
     const dueDate = document.getElementById('dueDate').value;
     const status = document.getElementById('status').value;
     const notes = document.getElementById('notes').value.trim();
-    
-    clearAllErrors();
-    let isValid = true;
-    
-    if (!fullName) {
-        showError('fullName', 'Ism va familiya majburiy');
-        isValid = false;
-    }
-    
-    if (!phone) {
-        showError('phone', 'Telefon raqami majburiy');
-        isValid = false;
-    } else if (!/^\+?998[-\s]?/.test(phone)) {
-        // Allow various phone formats
-        if (phone.length < 9) {
-            showError('phone', 'Telefon raqami noto\'g\'ri');
-            isValid = false;
-        }
-    }
-    
-    if (!amount || amount <= 0) {
-        showError('amount', 'Qarz summasi noto\'g\'ri');
-        isValid = false;
-    }
-    
-    if (!loanDate) {
-        showError('loanDate', 'Qarz sanasi majburiy');
-        isValid = false;
-    }
-    
-    if (!dueDate) {
-        showError('dueDate', 'Qaytarish muddati majburiy');
-        isValid = false;
-    }
-    
-    if (loanDate && dueDate && loanDate > dueDate) {
-        showError('dueDate', 'Qaytarish muddati qarz sanasidan keyin bo\'lsin');
-        isValid = false;
-    }
-    
-    if (!isValid) {
-        showToast('Maydonlarni to\'g\'ri to\'ldiring', 'error');
+
+    let errors = [];
+    if (!name || name.length < 2) errors.push('Ismni kiriting');
+    if (!phone) errors.push('Telefonni kiriting');
+    if (!amount || amount <= 0) errors.push('Summa noto\'g\'ri');
+    if (!loanDate) errors.push('Sanani kiriting');
+    if (!dueDate) errors.push('Muddatni kiriting');
+    if (loanDate && dueDate && loanDate > dueDate) errors.push('Muddat sana oldin bo\'lmasin');
+
+    if (errors.length) {
+        showToast('⚠️ ' + errors.join(', '), 'error');
         return;
     }
-    
-    const action = appState.currentEditId ? 'updated' : 'created';
-    let savedDebtor;
 
-    if (appState.currentEditId) {
-        // Edit existing
-        const debtor = appState.debtors.find(d => d.id === appState.currentEditId);
-        debtor.fullName = fullName;
-        debtor.phone = phone;
-        debtor.address = address;
-        debtor.amount = amount;
-        debtor.loanDate = loanDate;
-        debtor.dueDate = dueDate;
-        debtor.status = status;
-        debtor.notes = notes;
-        debtor.updatedAt = new Date().toISOString();
-        savedDebtor = debtor;
-        
-        showToast('Qarzdor yangilandi', 'success');
+    if (state.currentEditId) {
+        const d = state.debtors.find(x => x.id === state.currentEditId);
+        if (d) {
+            d.fullName = name; d.phone = phone; d.address = address; d.amount = amount;
+            d.loanDate = loanDate; d.dueDate = dueDate; d.status = status; d.notes = notes;
+            d.updatedAt = new Date().toISOString();
+        }
+        showToast('✅ Yangilandi', 'success');
     } else {
-        // Add new
-        const newDebtor = {
-            id: generateId(),
-            fullName,
-            phone,
-            address,
-            amount,
-            loanDate,
-            dueDate,
-            status,
-            notes,
-            totalPaid: 0,
-            payments: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+        const newD = {
+            id: generateId(), fullName: name, phone, address, amount,
+            loanDate, dueDate, status, notes,
+            totalPaid: 0, payments: [],
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
         };
-        
-        appState.debtors.push(newDebtor);
-        savedDebtor = newDebtor;
-        showToast('Yangi qarzdor qo\'shildi', 'success');
+        state.debtors.push(newD);
+        showToast('✅ Qo\'shildi', 'success');
     }
-    
-    saveDataToStorage();
-    updateDashboard();
+    saveData();
+    updateUI();
     renderDebtors();
-    closeDebtorModal();
-    sendDebtorEvent(savedDebtor, action);
+    closeModal('debtorModal');
+    syncDebtorToServer(state.debtors.find(item => item.id === (state.currentEditId || state.debtors[state.debtors.length - 1]?.id)), state.currentEditId ? 'updated' : 'created');
+});
+
+// ---------- PAYMENT MODAL ----------
+function openPaymentModal(debtorId) {
+    state.currentDebtorId = debtorId;
+    const d = state.debtors.find(x => x.id === debtorId);
+    if (!d) return;
+    const remaining = Math.max(d.amount - d.totalPaid, 0);
+    document.getElementById('paymentAmount').max = remaining;
+    document.getElementById('paymentAmount').placeholder = '0';
+    document.getElementById('paymentMaxHint').textContent = 'Maksimum: ' + formatCurrency(remaining);
+    document.getElementById('paymentForm').reset();
+    document.getElementById('paymentError').classList.remove('show');
+    document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
+    // Fayl preview tozalash
+    document.getElementById('filePreviewList').innerHTML = '';
+    document.getElementById('paymentFile').value = '';
+    openModal('paymentModal');
 }
 
-function deleteDebtorConfirm(debtorId) {
-    const debtor = appState.debtors.find(d => d.id === debtorId);
-    if (!debtor) return;
-    
-    closeDetailsModal();
-    
-    showConfirmation(
-        'Qarzdorni O\'chirish',
-        `${debtor.fullName} ni o\'chirasizmi? Bu amalni qaytarish mumkin emas.`,
-        () => deleteDebtor(debtorId)
-    );
-}
+document.getElementById('paymentCloseBtn').addEventListener('click', () => closeModal('paymentModal'));
+document.getElementById('paymentCancelBtn').addEventListener('click', () => closeModal('paymentModal'));
 
-function deleteDebtor(debtorId) {
-    const debtor = appState.debtors.find(d => d.id === debtorId);
-    appState.debtors = appState.debtors.filter(d => d.id !== debtorId);
-    saveDataToStorage();
-    updateDashboard();
-    renderDebtors();
-    showToast('Qarzdor o\'chirildi', 'success');
-    if (debtor) {
-        fetch(`${API_BASE_URL}/api/debtors/${encodeURIComponent(debtorId)}`, { method: 'DELETE' })
-            .catch(error => console.info('O\'chirish serverga yuborilmadi:', error.message));
-    }
-}
+// ---------- FAYL YUKLASH (RASM + PDF) ----------
+document.getElementById('paymentFile').addEventListener('change', function(e) {
+    const container = document.getElementById('filePreviewList');
+    container.innerHTML = '';
+    const files = Array.from(this.files);
+    files.forEach((file, idx) => {
+        const div = document.createElement('div');
+        div.className = 'file-preview-item';
+        const icon = file.type.startsWith('image/') ? '🖼️' : '📄';
+        const size = (file.size / 1024).toFixed(0) + ' KB';
+        div.innerHTML = `${icon} ${file.name} (${size}) <span class="remove-file" data-idx="${idx}">✕</span>`;
+        container.appendChild(div);
+    });
+    // Remove handler
+    container.querySelectorAll('.remove-file').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const idx = parseInt(this.dataset.idx);
+            const dt = new DataTransfer();
+            const input = document.getElementById('paymentFile');
+            const files = Array.from(input.files);
+            files.forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change'));
+        });
+    });
+});
 
-function markAsCompleted(debtorId) {
-    const debtor = appState.debtors.find(d => d.id === debtorId);
-    if (debtor) {
-        debtor.status = 'completed';
-        debtor.updatedAt = new Date().toISOString();
-        saveDataToStorage();
-        updateDashboard();
-        renderDebtors();
-        openDetailsModal(debtorId);
-        showToast('Qarz to\'liq to\'langan deb belgilandi', 'success');
-        sendDebtorEvent(debtor, 'updated');
-    }
-}
-
-// ==================== PAYMENTS ====================
-function addPayment(e) {
+// Drag & Drop qo'llab-quvvatlash
+const dropArea = document.getElementById('fileDropArea');
+['dragenter', 'dragover'].forEach(ev => dropArea.addEventListener(ev, e => { e.preventDefault(); dropArea.style.borderColor = 'var(--blue)'; }));
+['dragleave', 'drop'].forEach(ev => dropArea.addEventListener(ev, e => { e.preventDefault(); dropArea.style.borderColor = ''; }));
+dropArea.addEventListener('drop', function(e) {
     e.preventDefault();
-    
-    if (!appState.currentDebtorId) return;
-    
-    const debtor = appState.debtors.find(d => d.id === appState.currentDebtorId);
-    if (!debtor) return;
-    
+    const files = e.dataTransfer.files;
+    const input = document.getElementById('paymentFile');
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach(f => dt.items.add(f));
+    Array.from(files).forEach(f => dt.items.add(f));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change'));
+});
+
+// ---------- TO'LOV QO'SHISH ----------
+document.getElementById('paymentForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const debtorId = state.currentDebtorId;
+    const d = state.debtors.find(x => x.id === debtorId);
+    if (!d) return;
+
     const amount = parseFloat(document.getElementById('paymentAmount').value);
     const date = document.getElementById('paymentDate').value;
     const method = document.getElementById('paymentMethod').value;
-    
-    const errorElement = document.getElementById('paymentError');
-    errorElement.classList.remove('show');
-    
+    const errorEl = document.getElementById('paymentError');
+
     if (!amount || amount <= 0) {
-        errorElement.textContent = 'To\'lov summasi noto\'g\'ri';
-        errorElement.classList.add('show');
+        errorEl.textContent = 'Summani kiriting';
+        errorEl.classList.add('show');
         return;
     }
-    
-    const remainingDebt = debtor.amount - debtor.totalPaid;
-    if (amount > remainingDebt) {
-        errorElement.textContent = `Qolgan qarz ${formatCurrency(remainingDebt)} dan ko\'p to\'lov qo\'shib bo\'lmaydi`;
-        errorElement.classList.add('show');
+    const remaining = d.amount - d.totalPaid;
+    if (amount > remaining) {
+        errorEl.textContent = `Qolgan qarz ${formatCurrency(remaining)} dan oshmasligi kerak`;
+        errorEl.classList.add('show');
         return;
     }
-    
     if (!date) {
-        errorElement.textContent = 'Sana majburiy';
-        errorElement.classList.add('show');
+        errorEl.textContent = 'Sanani tanlang';
+        errorEl.classList.add('show');
         return;
     }
-    
-    debtor.payments.push({
+
+    // Fayllarni olish
+    const fileInput = document.getElementById('paymentFile');
+    const files = Array.from(fileInput.files);
+    const fileData = files.map(f => ({
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        // Aslida faylni saqlash uchun backend kerak, lekin frontendda faqat metama'lumot saqlaymiz
+        // Biz faylni base64 ga o'girib saqlashimiz mumkin (kichik fayllar uchun)
+        // Lekin bu yerda soddalik uchun faqat nomini saqlaymiz
+        // Haqiqiy fayl yuklash uchun server API kerak
+        // Hozircha fayl ma'lumotlarini xotirada saqlaymiz
+        dataURL: null // realda bu yerda base64 bo'ladi
+    }));
+
+    // To'lovni qo'shish
+    d.payments.push({
         id: generateId(),
         amount,
         date,
         method,
+        files: fileData,
         createdAt: new Date().toISOString()
     });
-    
-    debtor.totalPaid += amount;
-    
-    // Update status
-    if (debtor.totalPaid >= debtor.amount) {
-        debtor.status = 'completed';
-    } else if (debtor.totalPaid > 0) {
-        debtor.status = 'partial';
-    }
-    
-    debtor.updatedAt = new Date().toISOString();
-    
-    saveDataToStorage();
-    updateDashboard();
+    d.totalPaid += amount;
+    if (d.totalPaid >= d.amount) d.status = 'completed';
+    else if (d.totalPaid > 0) d.status = 'partial';
+    d.updatedAt = new Date().toISOString();
+
+    saveData();
+    updateUI();
     renderDebtors();
-    closePaymentModal();
-    openDetailsModal(appState.currentDebtorId);
-    showToast('To\'lov qo\'shildi', 'success');
-    sendPaymentEvent(debtor);
+    closeModal('paymentModal');
+    showToast('✅ To\'lov qo\'shildi!', 'success');
+    syncPaymentToServer(d);
+});
+
+// ---------- DETALLAR ----------
+function openDetailsModal(debtorId) {
+    const d = state.debtors.find(x => x.id === debtorId);
+    if (!d) return;
+    state.currentDebtorId = debtorId;
+    document.getElementById('detailsTitle').textContent = 'Qarzdor tafsilotlari';
+    const container = document.getElementById('detailsContent');
+    const remaining = Math.max(d.amount - d.totalPaid, 0);
+    const daysLeft = getDaysLeft(d.dueDate);
+
+    const statusText = d.status === 'completed' ? 'To\'liq to\'langan' : d.status === 'partial' ? 'Qisman to\'langan' : d.status === 'overdue' ? 'Muddati o\'tgan' : 'Faol';
+    const methodNames = { cash: 'Naqd pul', card: 'Karta', transfer: 'O\'tkazma', check: 'Chek', other: 'Boshqa', completed: 'To\'liq to\'lov' };
+    const daysLabel = daysLeft < 0 ? `${Math.abs(daysLeft)} kun o'tgan` : daysLeft === 0 ? 'Bugun' : `${daysLeft} kun qoldi`;
+    let html = `
+        <div class="details-hero"><div class="details-avatar"><i data-lucide="user-round"></i></div><div><strong>${d.fullName}</strong><span>${statusText}</span></div></div>
+        <div class="details-section">
+            <div class="section-title"><i data-lucide="contact"></i> Aloqa</div>
+            <div class="detail-grid">
+                <div class="detail-row"><span class="label"><i data-lucide="phone"></i> Telefon</span><span>${d.phone}</span></div>
+                <div class="detail-row"><span class="label"><i data-lucide="map-pin"></i> Manzil</span><span>${d.address || 'Ko\'rsatilmagan'}</span></div>
+                <div class="detail-row"><span class="label"><i data-lucide="activity"></i> Holat</span><span>${statusText}</span></div>
+            </div>
+        </div>
+        <div class="details-section">
+            <div class="section-title"><i data-lucide="wallet-cards"></i> Qarz ma'lumotlari</div>
+            <div class="detail-grid detail-grid-finance">
+                <div class="detail-row"><span class="label"><i data-lucide="banknote"></i> Berilgan</span><strong>${formatCurrency(d.amount)}</strong></div>
+                <div class="detail-row"><span class="label"><i data-lucide="circle-check"></i> To'langan</span><strong class="amount-paid">${formatCurrency(d.totalPaid)}</strong></div>
+                <div class="detail-row"><span class="label"><i data-lucide="scale"></i> Qolgan</span><strong class="amount-remaining">${formatCurrency(remaining)}</strong></div>
+                <div class="detail-row"><span class="label"><i data-lucide="calendar-clock"></i> Muddat</span><span>${formatDate(d.dueDate)}</span></div>
+                <div class="detail-row"><span class="label"><i data-lucide="timer"></i> Qolgan vaqt</span><span class="${daysLeft <= 0 ? 'days-warning' : ''}">${daysLabel}</span></div>
+            </div>
+        </div>
+        ${d.notes ? `<div class="details-note"><i data-lucide="notebook-pen"></i><span>${d.notes}</span></div>` : ''}
+        <div class="details-section payment-history">
+            <div class="section-title"><i data-lucide="receipt-text"></i> To'lovlar <span class="count-badge">${d.payments ? d.payments.length : 0}</span></div>
+    `;
+
+    if (d.payments && d.payments.length) {
+        d.payments.slice().reverse().forEach(p => {
+            const fileIcons = (p.files && p.files.length) ? `<i data-lucide="paperclip" title="Ilova bor"></i>` : '';
+            html += `
+                <div class="payment-item">
+                    <div><strong>${formatCurrency(p.amount)}</strong><span>${formatDate(p.date)} · ${methodNames[p.method] || p.method || 'Usul ko\'rsatilmagan'}</span></div>
+                    ${fileIcons}
+                </div>
+            `;
+        });
+    } else {
+        html += `<div class="no-payments"><i data-lucide="receipt"></i><span>Hozircha to'lov yo'q</span></div>`;
+    }
+
+    html += `
+        <div class="details-actions">
+            <button class="btn btn-primary" onclick="openPaymentModal('${d.id}')"><i data-lucide="credit-card"></i> To'lov qo'shish</button>
+            <button class="btn btn-secondary" onclick="openDebtorModal('${d.id}')"><i data-lucide="pencil"></i> Tahrirlash</button>
+            <button class="btn btn-danger" onclick="deleteDebtor('${d.id}')"><i data-lucide="trash-2"></i> O'chirish</button>
+            ${d.status !== 'completed' ? `<button class="btn btn-success" onclick="markCompleted('${d.id}')"><i data-lucide="badge-check"></i> To'liq to'lash</button>` : ''}
+        </div>
+    `;
+
+    container.innerHTML = html;
+    if (window.lucide) window.lucide.createIcons();
+    openModal('detailsModal');
+}
+document.getElementById('detailsCloseBtn').addEventListener('click', () => closeModal('detailsModal'));
+
+// ---------- TO'LIQ TO'LOV ----------
+function markCompleted(debtorId) {
+    const d = state.debtors.find(x => x.id === debtorId);
+    if (!d) return;
+    const remaining = d.amount - d.totalPaid;
+    if (remaining > 0) {
+        d.payments.push({
+            id: generateId(),
+            amount: remaining,
+            date: new Date().toISOString().split('T')[0],
+            method: 'completed',
+            files: [],
+            createdAt: new Date().toISOString()
+        });
+        d.totalPaid = d.amount;
+    }
+    d.status = 'completed';
+    d.updatedAt = new Date().toISOString();
+    saveData();
+    updateUI();
+    renderDebtors();
+    if (document.getElementById('detailsModal').classList.contains('active')) openDetailsModal(debtorId);
+    showToast('✅ Qarz to\'liq to\'landi!', 'success');
+    syncPaymentToServer(d);
 }
 
-// ==================== RENDERING ====================
+// ---------- O'CHIRISH ----------
+function deleteDebtor(debtorId) {
+    if (!confirm('Rostdan ham o\'chirmoqchimisiz?')) return;
+    state.debtors = state.debtors.filter(x => x.id !== debtorId);
+    saveData();
+    updateUI();
+    renderDebtors();
+    closeModal('detailsModal');
+    showToast('🗑️ O\'chirildi', 'success');
+    syncDeleteToServer(debtorId);
+}
+
+// ---------- RENDER QARZDORLAR ----------
 function renderDebtors() {
     const list = document.getElementById('debtorsList');
-    
-    let filteredDebtors = [...appState.debtors];
-    
-    // Search
-    if (appState.searchTerm) {
-        const term = appState.searchTerm.toLowerCase();
-        filteredDebtors = filteredDebtors.filter(d =>
-            d.fullName.toLowerCase().includes(term) ||
-            d.phone.includes(term)
-        );
+    let filtered = [...state.debtors];
+
+    // Qidiruv
+    const term = state.searchTerm.toLowerCase().trim();
+    if (term) {
+        filtered = filtered.filter(d => d.fullName.toLowerCase().includes(term) || d.phone.includes(term));
     }
-    
-    // Filter
-    if (appState.filterType !== 'all') {
-        filteredDebtors = filteredDebtors.filter(d => {
-            if (appState.filterType === 'overdue') {
-                return isDebtorOverdue(d);
-            }
-            return d.status === appState.filterType;
-        });
+
+    // Filtr
+    if (state.filterType !== 'all') {
+        if (state.filterType === 'overdue') {
+            filtered = filtered.filter(d => {
+                const days = getDaysLeft(d.dueDate);
+                return days < 0 && d.status !== 'completed';
+            });
+        } else {
+            filtered = filtered.filter(d => d.status === state.filterType);
+        }
     }
-    
-    // Sort
-    if (appState.sortBy === 'newest') {
-        filteredDebtors.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    } else if (appState.sortBy === 'amount') {
-        filteredDebtors.sort((a, b) => b.amount - a.amount);
-    }
-    
-    if (filteredDebtors.length === 0) {
-        list.innerHTML = `
-            <div class="empty-state">
-                <p class="empty-text">Qarzdor topilmadi</p>
-            </div>
-        `;
+
+    // Saralash
+    if (state.sortBy === 'newest') filtered.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    else if (state.sortBy === 'amount') filtered.sort((a,b) => b.amount - a.amount);
+    else if (state.sortBy === 'dueDate') filtered.sort((a,b) => new Date(a.dueDate) - new Date(b.dueDate));
+
+    if (!filtered.length) {
+        list.innerHTML = `<div class="empty-state"><i data-lucide="search-x"></i><strong>Hech narsa topilmadi</strong><span>Qidiruv yoki filtrni o'zgartirib ko'ring.</span></div>`;
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
-    
-    list.innerHTML = filteredDebtors.map(debtor => {
-        const remainingDebt = debtor.amount - debtor.totalPaid;
-        const progress = (debtor.totalPaid / debtor.amount) * 100;
-        const statusText = getStatusText(debtor.status);
-        const isOverdue = isDebtorOverdue(debtor);
-        
+
+    list.innerHTML = filtered.map(d => {
+        const remaining = d.amount - d.totalPaid;
+        const progress = d.amount > 0 ? (d.totalPaid / d.amount) * 100 : 0;
+        const days = getDaysLeft(d.dueDate);
+        let daysText = '';
+        if (d.status !== 'completed') {
+            if (days < 0) daysText = `<div class="days-left overdue"><i data-lucide="alert-circle"></i> ${Math.abs(days)} kun o'tgan</div>`;
+            else if (days === 0) daysText = `<div class="days-left today"><i data-lucide="clock-3"></i> Bugun muddat</div>`;
+            else daysText = `<div class="days-left">${days} kun qoldi</div>`;
+        }
+
+        const isOverdue = days < 0 && d.status !== 'completed';
+        const statusClass = isOverdue ? 'overdue' : d.status;
+
         return `
             <div class="debtor-card">
-                <div class="debtor-card-header">
-                    <div class="debtor-name">${debtor.fullName}</div>
-                    <span class="status-badge ${debtor.status} ${isOverdue ? 'overdue' : ''}">
-                        ${isOverdue ? 'Muddati' : statusText}
-                    </span>
+                <div class="debtor-header">
+                    <span class="debtor-name">${d.fullName}</span>
+                    <span class="status-badge ${statusClass}">${isOverdue ? 'Muddati o\'tgan' : d.status === 'active' ? 'Faol' : d.status === 'partial' ? 'Qisman' : 'To\'liq'}</span>
                 </div>
-                
                 <div class="debtor-info">
-                    <div class="info-item">
-                        <span class="info-label"><svg class="inline-icon" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.62 2.63a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.85.29 1.73.5 2.63.62A2 2 0 0 1 22 16.92z"></path></svg> Telefon:</span>
-                        <span class="info-value"><a href="tel:${debtor.phone}" style="color: var(--color-blue); text-decoration: none;">${debtor.phone}</a></span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label"><svg class="inline-icon" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"></rect><circle cx="12" cy="12" r="3"></circle></svg> Qarz:</span>
-                        <span class="info-value">${formatCurrency(debtor.amount)}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label"><svg class="inline-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Sana:</span>
-                        <span class="info-value">${formatDate(debtor.loanDate)}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label"><svg class="inline-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></svg> Muddati:</span>
-                        <span class="info-value">${formatDate(debtor.dueDate)}</span>
-                    </div>
+                    <div><span class="label"><i data-lucide="phone"></i></span> ${d.phone}</div>
+                    <div><span class="label"><i data-lucide="banknote"></i></span> ${formatCurrency(d.amount)}</div>
+                    <div><span class="label"><i data-lucide="calendar-plus"></i></span> ${formatDate(d.loanDate)}</div>
+                    <div><span class="label"><i data-lucide="calendar-clock"></i></span> ${formatDate(d.dueDate)}</div>
                 </div>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${Math.min(progress, 100)}%"></div>
-                </div>
-                
-                <div style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
-                    To\'langan: ${formatCurrency(debtor.totalPaid)} / ${formatCurrency(debtor.amount)}
-                </div>
-                
+                <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(progress,100)}%"></div></div>
+                <div style="font-size:13px;color:var(--text2);">To'langan: ${formatCurrency(d.totalPaid)} / ${formatCurrency(d.amount)}</div>
+                ${daysText}
                 <div class="debtor-actions">
-                    <button class="action-btn" onclick="openDetailsModal('${debtor.id}')">Detallar</button>
-                    <button class="action-btn" onclick="openPaymentModal('${debtor.id}')"><svg class="button-icon" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"></rect><circle cx="12" cy="12" r="3"></circle></svg> To\'lov</button>
-                    <button class="action-btn success" onclick="markAsCompleted('${debtor.id}')"><svg class="button-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg> To\'liq</button>
-                    <button class="action-btn" onclick="openDebtorModal('${debtor.id}')"><svg class="button-icon" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg> Tahrirlash</button>
-                    <button class="action-btn danger" onclick="deleteDebtorConfirm('${debtor.id}')"><svg class="button-icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> O\'chirish</button>
+                    <button onclick="openDetailsModal('${d.id}')"><i data-lucide="eye"></i> Detallar</button>
+                    <button onclick="openPaymentModal('${d.id}')"><i data-lucide="credit-card"></i> To'lov</button>
+                    ${d.status !== 'completed' ? `<button class="success" onclick="markCompleted('${d.id}')"><i data-lucide="check-circle-2"></i> To'liq</button>` : ''}
+                    <button aria-label="Tahrirlash" title="Tahrirlash" onclick="openDebtorModal('${d.id}')"><i data-lucide="pencil"></i></button>
+                    <button class="danger" aria-label="O'chirish" title="O'chirish" onclick="deleteDebtor('${d.id}')"><i data-lucide="trash-2"></i></button>
                 </div>
             </div>
         `;
     }).join('');
+    if (window.lucide) window.lucide.createIcons();
 }
 
-// ==================== DASHBOARD ====================
-function updateDashboard() {
-    const totalDebtors = appState.debtors.length;
-    const totalDebt = appState.debtors.reduce((sum, d) => sum + d.amount, 0);
-    const totalPaid = appState.debtors.reduce((sum, d) => sum + d.totalPaid, 0);
-    const totalRemaining = totalDebt - totalPaid;
-    const overdueCount = appState.debtors.filter(d => isDebtorOverdue(d)).length;
-    const completedCount = appState.debtors.filter(d => d.status === 'completed').length;
-    
-    document.getElementById('totalDebtors').textContent = totalDebtors;
+// ---------- UI YANGILASH ----------
+function updateUI() {
+    const total = state.debtors.length;
+    const totalDebt = state.debtors.reduce((s,d) => s + d.amount, 0);
+    const totalPaid = state.debtors.reduce((s,d) => s + d.totalPaid, 0);
+    const remaining = totalDebt - totalPaid;
+    const overdue = state.debtors.filter(d => getDaysLeft(d.dueDate) < 0 && d.status !== 'completed').length;
+    const completed = state.debtors.filter(d => d.status === 'completed').length;
+
+    document.getElementById('totalDebtors').textContent = total;
     document.getElementById('totalDebt').textContent = formatCurrency(totalDebt);
     document.getElementById('totalPaid').textContent = formatCurrency(totalPaid);
-    document.getElementById('totalRemaining').textContent = formatCurrency(totalRemaining);
-    document.getElementById('overdueCount').textContent = overdueCount;
-    document.getElementById('completedCount').textContent = completedCount;
+    document.getElementById('totalRemaining').textContent = formatCurrency(remaining);
+    document.getElementById('overdueCount').textContent = overdue;
+    document.getElementById('completedCount').textContent = completed;
+
+    updateCharts();
 }
 
-// ==================== HELPERS ====================
-function isDebtorOverdue(debtor) {
-    const today = new Date();
-    const dueDate = new Date(debtor.dueDate);
-    return today > dueDate && debtor.status !== 'completed';
-}
-
-function getStatusText(status) {
-    const statusMap = {
-        'active': 'Faol',
-        'partial': 'Qisman',
-        'completed': 'To\'liq',
-        'overdue': 'Muddati'
-    };
-    return statusMap[status] || status;
-}
-
-function formatCurrency(amount) {
-    return new Intl.NumberFormat('uz-UZ').format(Math.round(amount)) + ' so\'m';
-}
-
-function formatPhoneNumber(value) {
-    let digits = value.replace(/\D/g, '');
-    if (!digits) return '';
-
-    if (digits.startsWith('998')) {
-        digits = digits.slice(3);
-    }
-
-    digits = digits.slice(0, 9);
-    const groups = [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)]
-        .filter(Boolean);
-    return `+998${groups.length ? ` ${groups.join(' ')}` : ''}`;
-}
-
-function formatDate(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString + 'T00:00:00');
-    return new Intl.DateTimeFormat('uz-UZ', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    }).format(date);
-}
-
-function setDefaultDates() {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 30);
-
-    const toDateInputValue = date => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
-    const todayString = toDateInputValue(today);
-    const tomorrowString = toDateInputValue(tomorrow);
-    
-    document.getElementById('loanDate').value = todayString;
-    document.getElementById('dueDate').value = tomorrowString;
-    document.getElementById('paymentDate').value = todayString;
-}
-
-// ==================== VALIDATION ====================
-function showError(fieldId, message) {
-    const errorElement = document.getElementById(fieldId + 'Error');
-    if (errorElement) {
-        errorElement.textContent = message;
-        errorElement.classList.add('show');
-        document.getElementById(fieldId).parentElement.classList.add('error');
-    }
-}
-
-function clearAllErrors() {
-    document.querySelectorAll('.error-message').forEach(el => {
-        el.classList.remove('show');
-        el.textContent = '';
+// ---------- GRAFIKLAR ----------
+function updateCharts() {
+    const statuses = { active: 0, partial: 0, completed: 0, overdue: 0 };
+    state.debtors.forEach(d => {
+        const days = getDaysLeft(d.dueDate);
+        if (days < 0 && d.status !== 'completed') statuses.overdue++;
+        else if (d.status === 'completed') statuses.completed++;
+        else if (d.status === 'partial') statuses.partial++;
+        else statuses.active++;
     });
-    document.querySelectorAll('.form-group').forEach(el => {
-        el.classList.remove('error');
+
+    const styles = getComputedStyle(document.documentElement);
+    const textColor = styles.getPropertyValue('--text2').trim();
+    const gridColor = styles.getPropertyValue('--border').trim();
+    const cardColor = styles.getPropertyValue('--card').trim();
+    const chartBlue = styles.getPropertyValue('--blue').trim();
+    const chartOrange = styles.getPropertyValue('--orange').trim();
+    const chartGreen = styles.getPropertyValue('--green').trim();
+    const chartRed = styles.getPropertyValue('--red').trim();
+    const chartFont = { family: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif' };
+    const ctx1 = document.getElementById('statusChart').getContext('2d');
+    if (chartStatus) chartStatus.destroy();
+    chartStatus = new Chart(ctx1, {
+        type: 'doughnut',
+        data: {
+            labels: ['Faol', 'Qisman', 'To\'liq', 'Muddati o\'tgan'],
+            datasets: [{ data: [statuses.active, statuses.partial, statuses.completed, statuses.overdue],
+                backgroundColor: [chartBlue, chartOrange, chartGreen, chartRed],
+                borderColor: cardColor,
+                borderWidth: 3,
+                hoverOffset: 8 }]
+        },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '72%',
+                animation: { duration: 650, easing: 'easeOutQuart' },
+                plugins: { legend: { position: 'bottom', labels: { color: textColor, boxWidth: 12, boxHeight: 12, padding: 16, font: chartFont } } }
+            }
+    });
+
+    // Oylik to'lovlar
+    const monthly = {};
+    state.debtors.forEach(d => {
+        (d.payments || []).forEach(p => {
+            const m = p.date ? p.date.slice(0,7) : 'unknown';
+            monthly[m] = (monthly[m] || 0) + p.amount;
+        });
+    });
+    const months = Object.keys(monthly).sort();
+    const ctx2 = document.getElementById('monthlyChart').getContext('2d');
+    if (chartMonthly) chartMonthly.destroy();
+    chartMonthly = new Chart(ctx2, {
+        type: 'bar',
+        data: { labels: months, datasets: [{ label: 'To\'lov', data: months.map(m => monthly[m]), backgroundColor: chartBlue, borderRadius: 7, borderSkipped: false, maxBarThickness: 34 }] },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 650, easing: 'easeOutQuart' },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: context => ' ' + formatCurrency(context.raw) } } },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: textColor, font: chartFont } },
+                y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, font: chartFont, callback: value => new Intl.NumberFormat('uz-UZ', { notation: 'compact' }).format(value) } }
+            }
+        }
     });
 }
 
-// ==================== TOAST NOTIFICATION ====================
-function showToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.className = `toast show ${type}`;
-    
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 3000);
-}
+// ---------- QIDIRUV (DEBOUNCE) ----------
+document.getElementById('searchInput').addEventListener('input', function(e) {
+    clearTimeout(searchTimeout);
+    state.searchTerm = this.value;
+    searchTimeout = setTimeout(() => renderDebtors(), 300);
+});
 
-// ==================== PAGE NAVIGATION ====================
-function handlePageNavigation(page) {
-    if (page === 'home') {
-        document.querySelector('.container').scrollTop = 0;
-    } else if (page === 'add') {
-        openDebtorModal();
-    } else if (page === 'stats') {
-        showToast('Statistika sahifasi tezda bo\'ladi', 'info');
-    }
-}
+// ---------- FILTR ----------
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        state.filterType = this.dataset.filter;
+        renderDebtors();
+    });
+});
 
-// ==================== EXPORT/IMPORT ====================
-function exportData() {
-    try {
-        const data = {
-            version: '1.0',
-            exportDate: new Date().toISOString(),
-            debtors: appState.debtors
-        };
-        
-        const dataString = JSON.stringify(data, null, 2);
-        const blob = new Blob([dataString], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `qarz_daftari_${new Date().toISOString().split('T')[0]}.json`;
-        link.click();
-        
-        URL.revokeObjectURL(url);
-        showToast('Ma\'lumotlar eksport qilindi', 'success');
-    } catch (error) {
-        showToast('Eksportda xatolik', 'error');
-    }
-}
+// ---------- SARALASH ----------
+document.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        state.sortBy = this.dataset.sort;
+        renderDebtors();
+    });
+});
+// default sort
+document.querySelector('.sort-btn[data-sort="newest"]')?.classList.add('active');
 
-function importData(e) {
-    const file = e.target.files[0];
+// ---------- NAVIGATSIYA ----------
+document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const page = this.dataset.page;
+        if (page === 'home') window.scrollTo({ top: 0, behavior: 'smooth' });
+        else if (page === 'list') document.querySelector('.debtors-section')?.scrollIntoView({ behavior: 'smooth' });
+        else if (page === 'add') openDebtorModal();
+        else if (page === 'stats') document.querySelector('.stats-grid')?.scrollIntoView({ behavior: 'smooth' });
+    });
+});
+
+// ---------- FAB ----------
+document.getElementById('fabBtn').addEventListener('click', () => openDebtorModal());
+
+// ---------- SOZLAMALAR ----------
+document.getElementById('settingsBtn').addEventListener('click', () => openModal('settingsModal'));
+document.getElementById('settingsCloseBtn').addEventListener('click', () => closeModal('settingsModal'));
+
+// Eksport
+document.getElementById('exportBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(state.debtors, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `qarzlar_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    showToast('📤 Eksport qilindi', 'success');
+});
+
+// Import
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = this.files[0];
     if (!file) return;
-    
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = function(ev) {
         try {
-            const data = JSON.parse(event.target.result);
-            
-            if (data.debtors && Array.isArray(data.debtors)) {
-                appState.debtors = data.debtors;
-                saveDataToStorage();
-                syncDataToServer('imported');
-                updateDashboard();
+            const data = JSON.parse(ev.target.result);
+            if (Array.isArray(data)) {
+                state.debtors = data;
+                saveData();
+                updateUI();
                 renderDebtors();
-                showToast('Ma\'lumotlar import qilindi', 'success');
+                showToast('📥 Import muvaffaqiyatli!', 'success');
+                syncToServer();
             } else {
-                showToast('Noto\'g\'ri fayl formati', 'error');
+                showToast('Noto\'g\'ri format', 'error');
             }
-        } catch (error) {
-            showToast('Faylni o\'qishda xatolik', 'error');
-        }
+        } catch(e) { showToast('Xatolik', 'error'); }
     };
-    
     reader.readAsText(file);
-    
-    // Reset file input
-    e.target.value = '';
-}
+    this.value = '';
+});
 
-// ==================== DEMO DATA ====================
-function addDemoData() {
-    if (appState.debtors.length > 0) {
-        showConfirmation(
-            'Ehtiyot',
-            'Demo ma\'lumot qo\'shishdan avval barcha mavjud ma\'lumotlar o\'chib ketadi. Davom etasizmi?',
-            () => {
-                appState.debtors = [];
-                insertDemoData();
-            }
-        );
-    } else {
-        insertDemoData();
-    }
-}
+// Demo ma'lumot
+document.getElementById('addDemoBtn').addEventListener('click', () => {
+    if (state.debtors.length && !confirm('Mavjud ma\'lumotlar o\'chib ketadi. Davom?')) return;
+    state.debtors = [];
+    const now = new Date();
+    const d1 = new Date(now); d1.setDate(d1.getDate() - 5);
+    const d2 = new Date(now); d2.setDate(d2.getDate() + 10);
+    const d3 = new Date(now); d3.setDate(d3.getDate() - 2);
+    const d4 = new Date(now); d4.setDate(d4.getDate() + 25);
 
-function insertDemoData() {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const nextWeek = new Date(today);
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    const nextMonth = new Date(today);
-    nextMonth.setDate(nextMonth.getDate() + 30);
-    const lastMonth = new Date(today);
-    lastMonth.setDate(lastMonth.getDate() - 30);
-    
-    const demoDebtors = [
-        {
-            id: generateId(),
-            fullName: 'Ali Karimov',
-            phone: '+998 (90) 123-45-67',
-            address: 'Tashkent, Chilanzar 8',
-            amount: 5000000,
-            loanDate: lastMonth.toISOString().split('T')[0],
-            dueDate: yesterday.toISOString().split('T')[0],
-            status: 'overdue',
-            notes: 'Muddati o\'tgan qarz',
-            totalPaid: 2000000,
-            payments: [
-                {
-                    id: generateId(),
-                    amount: 2000000,
-                    date: new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    method: 'cash',
-                    createdAt: new Date().toISOString()
-                }
-            ],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        },
-        {
-            id: generateId(),
-            fullName: 'Gulnora Akbarova',
-            phone: '+998 (91) 234-56-78',
-            address: 'Samarkand, Registan 5',
-            amount: 3500000,
-            loanDate: new Date(today.getTime() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            dueDate: nextWeek.toISOString().split('T')[0],
-            status: 'partial',
-            notes: 'Qisman to\'langan qarz',
-            totalPaid: 1500000,
-            payments: [
-                {
-                    id: generateId(),
-                    amount: 1000000,
-                    date: new Date(today.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    method: 'card',
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    id: generateId(),
-                    amount: 500000,
-                    date: new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    method: 'transfer',
-                    createdAt: new Date().toISOString()
-                }
-            ],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        },
-        {
-            id: generateId(),
-            fullName: 'Jasur Maxmudov',
-            phone: '+998 (99) 345-67-89',
-            address: 'Fergona, Sharafliy 12',
-            amount: 2000000,
-            loanDate: new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            dueDate: new Date(today.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            status: 'completed',
-            notes: 'To\'liq to\'langan qarz',
-            totalPaid: 2000000,
-            payments: [
-                {
-                    id: generateId(),
-                    amount: 2000000,
-                    date: new Date(today.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    method: 'transfer',
-                    createdAt: new Date().toISOString()
-                }
-            ],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        },
-        {
-            id: generateId(),
-            fullName: 'Sonya Uzbekova',
-            phone: '+998 (88) 456-78-90',
-            address: 'Andijan, Bobur 7',
-            amount: 4500000,
-            loanDate: today.toISOString().split('T')[0],
-            dueDate: nextMonth.toISOString().split('T')[0],
-            status: 'active',
-            notes: 'Yangi qarz',
-            totalPaid: 0,
-            payments: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        }
+    const demo = [
+        { fullName: 'Ali Karimov', phone: '+998 90 123 45 67', address: 'Toshkent', amount: 5000000, loanDate: d1.toISOString().split('T')[0], dueDate: d3.toISOString().split('T')[0], status: 'overdue', notes: 'Muddati o\'tgan', totalPaid: 2000000, payments: [{ id: generateId(), amount: 2000000, date: new Date(now.getTime()-3*86400000).toISOString().split('T')[0], method: 'cash', files: [], createdAt: new Date().toISOString() }] },
+        { fullName: 'Gulnora Akbarova', phone: '+998 91 234 56 78', address: 'Samarqand', amount: 3500000, loanDate: new Date(now.getTime()-15*86400000).toISOString().split('T')[0], dueDate: d2.toISOString().split('T')[0], status: 'partial', notes: '', totalPaid: 1500000, payments: [{ id: generateId(), amount: 1000000, date: new Date(now.getTime()-10*86400000).toISOString().split('T')[0], method: 'card', files: [], createdAt: new Date().toISOString() }, { id: generateId(), amount: 500000, date: new Date(now.getTime()-5*86400000).toISOString().split('T')[0], method: 'transfer', files: [], createdAt: new Date().toISOString() }] },
+        { fullName: 'Jasur Maxmudov', phone: '+998 99 345 67 89', address: 'Farg\'ona', amount: 2000000, loanDate: new Date(now.getTime()-60*86400000).toISOString().split('T')[0], dueDate: new Date(now.getTime()-10*86400000).toISOString().split('T')[0], status: 'completed', notes: 'To\'liq to\'langan', totalPaid: 2000000, payments: [{ id: generateId(), amount: 2000000, date: new Date(now.getTime()-8*86400000).toISOString().split('T')[0], method: 'transfer', files: [], createdAt: new Date().toISOString() }] },
+        { fullName: 'Sonya Uzbekova', phone: '+998 88 456 78 90', address: 'Andijon', amount: 4500000, loanDate: now.toISOString().split('T')[0], dueDate: d4.toISOString().split('T')[0], status: 'active', notes: 'Yangi qarz', totalPaid: 0, payments: [] }
     ];
-    
-    appState.debtors = demoDebtors;
-    saveDataToStorage();
-    syncDataToServer('demo');
-    updateDashboard();
+    demo.forEach(d => { d.id = generateId(); d.createdAt = new Date().toISOString(); d.updatedAt = new Date().toISOString(); });
+    state.debtors = demo;
+    saveData();
+    updateUI();
     renderDebtors();
-    closeSettingsModal();
-    showToast('Demo ma\'lumot qo\'shildi', 'success');
+    closeModal('settingsModal');
+    showToast('🧪 Demo ma\'lumot qo\'shildi', 'success');
+    syncToServer();
+});
+
+// Barchasini o'chirish
+document.getElementById('clearAllBtn').addEventListener('click', () => {
+    if (confirm('Barcha ma\'lumotlar o\'chiriladi. Davom?')) {
+        state.debtors = [];
+        saveData();
+        updateUI();
+        renderDebtors();
+        closeModal('settingsModal');
+        showToast('🗑️ Hammasi o\'chirildi', 'success');
+        syncToServer();
+    }
+});
+
+// ---------- SERVER BILAN SINXRON ----------
+async function apiError(response, fallback) {
+    const body = await response.json().catch(() => ({}));
+    return body.details || body.error || `${fallback} (${response.status})`;
 }
 
-// ==================== CLEAR ALL DATA ====================
-function clearAllData() {
-    appState.debtors = [];
-    saveDataToStorage();
-    syncDataToServer('cleared');
-    updateDashboard();
-    renderDebtors();
-    closeSettingsModal();
-    showToast('Barcha ma\'lumotlar o\'chirildi', 'success');
+async function syncDebtorToServer(debtor, action) {
+    if (!debtor) return;
+    try {
+        const res = await fetch(API_BASE + '/api/debtors', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ debtor, action })
+        });
+        if (!res.ok) throw new Error(await apiError(res, 'Telegram xatosi'));
+    } catch (e) { showToast(`Telegram: ${e.message}`, 'error'); console.info(e); }
+}
+
+async function syncPaymentToServer(debtor) {
+    try {
+        const res = await fetch(API_BASE + '/api/payments', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ debtorId: debtor.id, debtor, payments: debtor.payments, totalPaid: debtor.totalPaid, status: debtor.status })
+        });
+        if (!res.ok) throw new Error(await apiError(res, 'Telegram xatosi'));
+    } catch (e) { showToast(`To'lov xabari: ${e.message}`, 'error'); console.info(e); }
+}
+
+async function syncDeleteToServer(debtorId) {
+    try {
+        const res = await fetch(API_BASE + '/api/debtors/' + encodeURIComponent(debtorId), { method: 'DELETE' });
+        if (!res.ok) throw new Error(await apiError(res, 'Telegram xatosi'));
+    } catch (e) { showToast(`O'chirish xabari: ${e.message}`, 'error'); console.info(e); }
+}
+
+async function syncToServer(action = null) {
+    try {
+        const res = await fetch(API_BASE + '/api/sync', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ debtors: state.debtors, action })
+        });
+        if (!res.ok) throw new Error('Server xatosi');
+        const data = await res.json();
+        if (action && !data.telegramSent) console.warn('Telegram yuborilmadi');
+    } catch (e) {
+        console.info('Serverga ulanish yo\'q, localStorage ishlatiladi.');
+    }
 }
 
 async function syncFromServer() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/debtors`);
-        if (!response.ok) return;
-
-        const data = await response.json();
-        if (data.debtors.length > 0 || appState.debtors.length === 0) {
-            appState.debtors = data.debtors;
-            saveDataToStorage();
-            updateDashboard();
+        const res = await fetch(API_BASE + '/api/debtors');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.debtors && data.debtors.length) {
+            state.debtors = data.debtors;
+            saveData();
+            updateUI();
             renderDebtors();
-        } else {
-            await syncDataToServer();
         }
-    } catch (error) {
-        console.info('Server hozircha ulanmagan, localStorage ishlatilmoqda.');
-    }
+    } catch (e) { console.info('Serverdan yuklash mumkin emas'); }
 }
 
-async function syncDataToServer(action = null) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/sync`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ debtors: appState.debtors, action })
-        });
-        const result = await readApiResponse(response);
-        if (!response.ok || (action && !result.telegramSent)) throw new Error(`Telegram yuborilmadi (server ${response.status})`);
-    } catch (error) {
-        console.info('Ma\'lumotlar serverga yuborilmadi:', error.message);
-    }
-}
+// ---------- PDF EKSPORT (SODDA) ----------
+document.getElementById('exportPdfBtn').addEventListener('click', () => {
+    // Bu yerda haqiqiy PDF generatsiyasi uchun jspdf kutubxonasidan foydalanish mumkin
+    // Hozircha brauzerning chop etish funksiyasidan foydalanamiz
+    window.print();
+});
 
-async function sendDebtorEvent(debtor, action) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/debtors`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ debtor, action })
-        });
-        const result = await readApiResponse(response);
-        if (!response.ok || !result.telegramSent) throw new Error(result.details || `Telegram yuborilmadi (server ${response.status})`);
-    } catch (error) {
-        console.error('Telegram bildirishnomasi yuborilmadi:', error.message);
-        showToast(`Telegram xatosi: ${error.message}`, 'error');
-    }
-}
+// ---------- EXCEL EKSPORT ----------
+document.getElementById('exportExcelBtn').addEventListener('click', () => {
+    // CSV formatida eksport (Excel ochadi)
+    let csv = 'Ism,Telefon,Manzil,Summa,To\'langan,Qolgan,Status,Muddat\n';
+    state.debtors.forEach(d => {
+        const rem = d.amount - d.totalPaid;
+        csv += `${d.fullName},${d.phone},"${d.address || ''}",${d.amount},${d.totalPaid},${rem},${d.status},${d.dueDate}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `qarzlar_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    showToast('📊 Excel (CSV) eksport qilindi', 'success');
+});
 
-async function sendPaymentEvent(debtor) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/payments`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-                debtorId: debtor.id,
-                debtor,
-                payments: debtor.payments,
-                totalPaid: debtor.totalPaid,
-                status: debtor.status
-            })
-        });
-        const result = await readApiResponse(response);
-        if (!response.ok || !result.telegramSent) throw new Error(result.details || `Telegram yuborilmadi (server ${response.status})`);
-    } catch (error) {
-        console.error('To\'lov Telegramga yuborilmadi:', error.message);
-        showToast(`Telegram xatosi: ${error.message}`, 'error');
-    }
-}
+// ---------- BACKUP / RESTORE ----------
+document.getElementById('backupBtn').addEventListener('click', () => {
+    const data = { version: '1.0', timestamp: new Date().toISOString(), debtors: state.debtors };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    showToast('💾 Zaxira saqlandi', 'success');
+});
 
-async function readApiResponse(response) {
-    const text = await response.text();
-    if (!text.trim()) return {};
+document.getElementById('restoreBtn').addEventListener('click', () => document.getElementById('restoreFileInput').click());
+document.getElementById('restoreFileInput').addEventListener('change', function(e) {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        try {
+            const data = JSON.parse(ev.target.result);
+            if (data.debtors && Array.isArray(data.debtors)) {
+                state.debtors = data.debtors;
+                saveData();
+                updateUI();
+                renderDebtors();
+                showToast('♻️ Zaxiradan tiklandi!', 'success');
+                syncToServer();
+            } else {
+                showToast('Noto\'g\'ri backup fayli', 'error');
+            }
+        } catch(e) { showToast('Xatolik', 'error'); }
+    };
+    reader.readAsText(file);
+    this.value = '';
+});
 
-    try {
-        return JSON.parse(text);
-    } catch (error) {
-        throw new Error(`Server ${response.status}: ${text.slice(0, 120)}`);
+// ---------- BULK DELETE ----------
+document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => {
+    if (confirm('Barcha qarzlarni o\'chirishni tasdiqlaysizmi?')) {
+        state.debtors = [];
+        saveData();
+        updateUI();
+        renderDebtors();
+        closeModal('settingsModal');
+        showToast('🗑️ Barcha qarzlar o\'chirildi', 'success');
+        syncToServer();
     }
-}
+});
+
+// ---------- BULK EXPORT ----------
+document.getElementById('bulkExportBtn')?.addEventListener('click', () => {
+    // Faqat faol va qisman qarzlarni eksport qilish
+    const filtered = state.debtors.filter(d => d.status === 'active' || d.status === 'partial');
+    if (!filtered.length) { showToast('Eksport uchun qarzdor yo\'q', 'error'); return; }
+    const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `faol_qarzlar_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    showToast('📤 Tanlanganlar eksport qilindi', 'success');
+});
+
+// ---------- BOSHLANG'ICH CHAQIRUVLAR ----------
+setDefaultDates();
