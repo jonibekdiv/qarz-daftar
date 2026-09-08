@@ -252,10 +252,11 @@ app.post('/api/payments', async (req, res) => {
 });
 
 async function removeDebtor(req, res) {
-    const debtor = state.debtors.find(item => item.id === req.params.id);
+    const debtorId = req.params.id || req.body.debtorId;
+    const debtor = state.debtors.find(item => item.id === debtorId);
     if (!debtor) return res.status(404).json({ error: 'Qarzdor topilmadi.' });
 
-    state.debtors = state.debtors.filter(item => item.id !== req.params.id);
+    state.debtors = state.debtors.filter(item => item.id !== debtorId);
     let telegramMessage;
     await saveState();
     try {
@@ -269,6 +270,7 @@ async function removeDebtor(req, res) {
 
 app.delete('/api/debtors/:id', removeDebtor);
 app.post('/api/debtors/:id/delete', removeDebtor);
+app.post('/api/delete-debtor', removeDebtor);
 
 async function checkReminders() {
     if (!telegramReady()) return;

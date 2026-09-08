@@ -801,11 +801,11 @@ async function syncPaymentToServer(debtor) {
 
 async function syncDeleteToServer(debtorId) {
     try {
-        const url = API_BASE + '/api/debtors/' + encodeURIComponent(debtorId);
-        let res = await fetch(url, { method: 'DELETE' });
-        if (res.status === 405) {
-            res = await fetch(url + '/delete', { method: 'POST' });
-        }
+        const res = await fetch(API_BASE + '/api/delete-debtor', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ debtorId })
+        });
         if (!res.ok) throw new Error(await apiError(res, 'Server yoki Telegram xatosi'));
     } catch (e) { showToast(`O'chirish xabari: ${e.message}`, 'error'); console.info(e); }
 }
