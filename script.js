@@ -12,6 +12,7 @@ const API_BASE = isLocalHost ? 'http://localhost:3000' : '';
 let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTerm: '', filterType: 'all', sortBy: 'newest' };
 let searchTimeout = null;
 let chartStatus = null, chartMonthly = null;
+let localMutationVersion = 0;
 
 const UZBEKISTAN_REGIONS = {
     'Qoraqalpog\'iston Respublikasi': ['Amudaryo', 'Beruniy', 'Bo\'zatov', 'Chimboy', 'Ellikqala', 'Kegeyli', 'Mo\'ynoq', 'Nukus', 'Qanliko\'l', 'Qo\'ng\'irot', 'Qorao\'zak', 'Shumanay', 'Taxtako\'pir', 'To\'rtko\'l', 'Xo\'jayli', 'Shumanay'],
@@ -541,6 +542,7 @@ function deleteDebtor(debtorId) {
     const debtor = state.debtors.find(item => item.id === debtorId);
     if (!debtor) return;
     requestConfirmation(`${debtor.fullName} ma'lumotlarini o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`, () => {
+        localMutationVersion += 1;
         syncDeleteToServer(debtorId, debtor);
     });
 }
@@ -921,10 +923,11 @@ async function syncToServer(action = null) {
 
 async function syncFromServer() {
     try {
+        const requestVersion = localMutationVersion;
         const res = await fetch(API_BASE + '/api/debtors');
         if (!res.ok) return;
         const data = await res.json();
-        if (Array.isArray(data.debtors)) {
+        if (requestVersion === localMutationVersion && Array.isArray(data.debtors)) {
             state.debtors = data.debtors;
             saveData();
             updateUI();
