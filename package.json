@@ -12,8 +12,14 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@netlify/database": "^2.0.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^1.0.0-beta.22",
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.0.0",
+    "drizzle-kit": "^1.0.0-beta.22"
   }
 }
