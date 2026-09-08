@@ -176,7 +176,10 @@ function openDebtorModal(editId = null) {
     document.getElementById('district').disabled = true;
     document.getElementById('mahalla').value = '';
     document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
-    document.getElementById('modalTitle').textContent = editId ? '✏️ Qarzdorni tahrirlash' : '➕ Yangi qarzdor';
+    document.getElementById('modalTitle').innerHTML = editId
+        ? '<i data-lucide="pencil"></i> Qarzdorni tahrirlash'
+        : '<i data-lucide="user-plus"></i> Yangi qarzdor';
+    if (window.lucide) window.lucide.createIcons();
     setDefaultDates();
 
     if (editId) {
@@ -688,6 +691,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         else if (page === 'list') document.querySelector('.debtors-section')?.scrollIntoView({ behavior: 'smooth' });
         else if (page === 'add') openDebtorModal();
         else if (page === 'stats') document.querySelector('.stats-grid')?.scrollIntoView({ behavior: 'smooth' });
+        else if (page === 'settings') openModal('settingsModal');
     });
 });
 

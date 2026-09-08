@@ -14,8 +14,10 @@
     <!-- ==================== TOP BAR ==================== -->
     <div class="top-bar">
         <div class="top-bar-inner">
-            <span class="app-title"><span class="brand-mark"><i data-lucide="book-open"></i></span> Qarz Daftari</span>
+            <span class="app-title"><span class="brand-mark"><i data-lucide="book-open"></i></span><span class="brand-copy"><strong>Qarz Daftari</strong><small>Barcha ma'lumotlar bir joyda</small></span></span>
             <div class="top-actions">
+                <button class="icon-btn notification-btn" title="Bildirishnomalar" aria-label="Bildirishnomalar"><i data-lucide="bell"></i><span></span></button>
+                <button class="profile-btn" title="Profil" aria-label="Profil"><i data-lucide="user-round"></i></button>
                 <button id="themeToggle" class="icon-btn" title="Tema" aria-label="Tema"><i data-lucide="sun-moon"></i></button>
                 <button id="settingsBtn" class="icon-btn" title="Sozlamalar" aria-label="Sozlamalar"><i data-lucide="settings-2"></i></button>
             </div>
@@ -79,7 +81,8 @@
         <button class="nav-btn active" data-page="home"><i data-lucide="house"></i><span>Bosh</span></button>
         <button class="nav-btn" data-page="list"><i data-lucide="clipboard-list"></i><span>Qarzlar</span></button>
         <button class="nav-btn" data-page="add"><i data-lucide="plus-circle"></i><span>Qo'shish</span></button>
-        <button class="nav-btn" data-page="stats"><i data-lucide="chart-no-axes-combined"></i><span>Statistika</span></button>
+        <button class="nav-btn" data-page="stats"><i data-lucide="calendar-days"></i><span>Hisobotlar</span></button>
+        <button class="nav-btn" data-page="settings"><i data-lucide="settings-2"></i><span>Sozlamalar</span></button>
     </div>
 
     <!-- ========================================================== -->
@@ -91,8 +94,8 @@
         <div class="modal-overlay"></div>
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="modalTitle">➕ Yangi qarzdor</h2>
-                <button class="modal-close" id="modalCloseBtn">✕</button>
+                <h2 id="modalTitle"><i data-lucide="user-plus"></i> Yangi qarzdor</h2>
+                <button class="modal-close" id="modalCloseBtn" aria-label="Yopish"><i data-lucide="x"></i></button>
             </div>
             <form id="debtorForm">
                 <div class="form-group"><label>Ism *</label><input type="text" id="fullName" placeholder="Ali Karimov" required /></div>
@@ -183,7 +186,7 @@
     <div id="settingsModal" class="modal">
         <div class="modal-overlay"></div>
         <div class="modal-content">
-            <div class="modal-header"><h2>⚙️ Sozlamalar</h2><button class="modal-close" id="settingsCloseBtn">✕</button></div>
+            <div class="modal-header"><h2><i data-lucide="settings-2"></i> Sozlamalar</h2><button class="modal-close" id="settingsCloseBtn" aria-label="Yopish"><i data-lucide="x"></i></button></div>
             <div class="settings-content">
                 <button class="btn btn-secondary" id="exportBtn">📤 JSON eksport</button>
                 <button class="btn btn-secondary" id="importBtn">📥 JSON import</button>
