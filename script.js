@@ -752,8 +752,12 @@ async function syncPaymentToServer(debtor) {
 
 async function syncDeleteToServer(debtorId) {
     try {
-        const res = await fetch(API_BASE + '/api/debtors/' + encodeURIComponent(debtorId), { method: 'DELETE' });
-        if (!res.ok) throw new Error(await apiError(res, 'Telegram xatosi'));
+        const url = API_BASE + '/api/debtors/' + encodeURIComponent(debtorId);
+        let res = await fetch(url, { method: 'DELETE' });
+        if (res.status === 405) {
+            res = await fetch(url + '/delete', { method: 'POST' });
+        }
+        if (!res.ok) throw new Error(await apiError(res, 'Server yoki Telegram xatosi'));
     } catch (e) { showToast(`O'chirish xabari: ${e.message}`, 'error'); console.info(e); }
 }
 

@@ -250,7 +250,7 @@ app.post('/api/payments', async (req, res) => {
     res.json({ ok: true, telegramSent: true, telegramMessageId: telegramMessage.message_id, debtor });
 });
 
-app.delete('/api/debtors/:id', async (req, res) => {
+async function removeDebtor(req, res) {
     const debtor = state.debtors.find(item => item.id === req.params.id);
     if (!debtor) return res.status(404).json({ error: 'Qarzdor topilmadi.' });
 
@@ -264,7 +264,10 @@ app.delete('/api/debtors/:id', async (req, res) => {
         return res.status(502).json({ error: 'Telegramga o\'chirish xabari yuborilmadi.', details: error.message });
     }
     res.json({ ok: true, telegramSent: true, telegramMessageId: telegramMessage.message_id });
-});
+}
+
+app.delete('/api/debtors/:id', removeDebtor);
+app.post('/api/debtors/:id/delete', removeDebtor);
 
 async function checkReminders() {
     if (!telegramReady()) return;
