@@ -143,15 +143,19 @@ input, select, textarea { font: inherit; }
 }
 .chart-box {
     background: var(--card);
-    padding: 14px;
-    border-radius: var(--radius-sm);
+    padding: 18px 18px 14px;
+    border-radius: 20px;
     box-shadow: var(--shadow);
     border: 1px solid var(--border);
-    min-height: 250px;
+    min-height: 310px;
     position: relative;
 }
-.chart-box h4 { font-size: 14px; color: var(--text2); margin-bottom: 8px; }
-.chart-box canvas { display: block; width: 100% !important; height: 190px !important; }
+.chart-box h4 { font-size: 16px; color: var(--text); margin-bottom: 12px; letter-spacing: -.01em; }
+.chart-box canvas { display: block; width: 100% !important; height: 238px !important; }
+.chart-status-box { overflow: hidden; }
+.chart-status-box .chart-center-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -42%); z-index: 1; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.chart-center-label strong { font-size: 30px; line-height: 1; color: var(--text); }
+.chart-center-label span { margin-top: 6px; color: var(--text2); font-size: 11px; white-space: nowrap; }
 
 /* ===== SEARCH ===== */
 .search-section {
@@ -495,7 +499,9 @@ input, select, textarea { font: inherit; }
 /* ===== RESPONSIVE ===== */
 @media (max-width: 600px) {
     .stats-grid { grid-template-columns: 1fr 1fr; }
-    .charts-row { grid-template-columns: 1fr; }
+    .charts-row { grid-template-columns: 1fr; gap: 12px; }
+    .chart-box { min-height: 290px; padding: 16px 12px 12px; }
+    .chart-box canvas { height: 220px !important; }
     .debtor-info { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
     .modal-content { padding: 16px; }

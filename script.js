@@ -542,6 +542,8 @@ function updateCharts() {
         else if (d.status === 'partial') statuses.partial++;
         else statuses.active++;
     });
+    const statusTotal = document.getElementById('statusTotal');
+    if (statusTotal) statusTotal.textContent = state.debtors.length;
 
     const styles = getComputedStyle(document.documentElement);
     const textColor = styles.getPropertyValue('--text2').trim();
