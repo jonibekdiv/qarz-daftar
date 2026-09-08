@@ -227,12 +227,14 @@ app.post('/api/debtors', async (req, res) => {
         return res.status(400).json({ error: validationErrors });
     }
 
+    const alreadyExists = state.debtors.some(item => item.id === debtor.id);
+    const action = alreadyExists && req.body.action === 'created' ? 'updated' : (req.body.action || 'created');
     state.debtors = state.debtors.filter(item => item.id !== debtor.id);
     state.debtors.push(debtor);
     let telegramMessage;
     await saveState();
     try {
-        telegramMessage = await notify(req.body.action || 'created', debtor);
+        telegramMessage = await notify(action, debtor);
     } catch (error) {
         console.error('Telegram xabari yuborilmadi:', error.message);
         return res.status(502).json({ error: 'Telegramga xabar yuborilmadi.', details: error.message });

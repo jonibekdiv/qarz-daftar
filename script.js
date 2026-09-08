@@ -13,6 +13,7 @@ let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTer
 let searchTimeout = null;
 let chartStatus = null, chartMonthly = null;
 let localMutationVersion = 0;
+const pendingDebtorRequests = new Set();
 
 const UZBEKISTAN_REGIONS = {
     'Qoraqalpog\'iston Respublikasi': ['Amudaryo', 'Beruniy', 'Bo\'zatov', 'Chimboy', 'Ellikqala', 'Kegeyli', 'Mo\'ynoq', 'Nukus', 'Qanliko\'l', 'Qo\'ng\'irot', 'Qorao\'zak', 'Shumanay', 'Taxtako\'pir', 'To\'rtko\'l', 'Xo\'jayli', 'Shumanay'],
@@ -868,6 +869,9 @@ async function apiError(response, fallback) {
 
 async function syncDebtorToServer(debtor, action) {
     if (!debtor) return;
+    const requestKey = `${debtor.id}:${debtor.updatedAt || ''}:${action}`;
+    if (pendingDebtorRequests.has(requestKey)) return;
+    pendingDebtorRequests.add(requestKey);
     try {
         const res = await fetch(API_BASE + '/api/debtors', {
             method: 'POST', headers: { 'content-type': 'application/json' },
@@ -875,6 +879,7 @@ async function syncDebtorToServer(debtor, action) {
         });
         if (!res.ok) throw new Error(await apiError(res, 'Telegram xatosi'));
     } catch (e) { showToast(`Telegram: ${e.message}`, 'error'); console.info(e); }
+    finally { pendingDebtorRequests.delete(requestKey); }
 }
 
 async function syncPaymentToServer(debtor) {
