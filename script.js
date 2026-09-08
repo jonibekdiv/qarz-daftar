@@ -7,7 +7,7 @@ const STORAGE_KEY = 'qarz_daftari_data';
 const THEME_KEY = 'qarz_daftari_theme';
 const PROFILE_KEY = 'qarz_daftari_profile';
 const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = isLocalHost ? 'http://localhost:3000' : '';
+const API_BASE = isLocalHost ? 'http://127.0.0.1:3000' : '';
 
 let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTerm: '', filterType: 'all', sortBy: 'newest' };
 let searchTimeout = null;
@@ -895,11 +895,15 @@ async function syncPaymentToServer(debtor) {
 async function syncDeleteToServer(debtorId, deletedDebtor = null) {
     try {
         const debtor = deletedDebtor || state.debtors.find(item => item.id === debtorId);
-        const res = await fetch(API_BASE + '/api/debtors', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ debtor, deleteOnly: true })
-        });
+        const request = () => fetch(API_BASE + '/api/debtors', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ debtor, deleteOnly: true }),
+                signal: AbortSignal.timeout(10000)
+            });
+        let res;
+        try { res = await request(); }
+        catch (firstError) { res = await request(); }
         if (!res.ok) throw new Error(await apiError(res, 'Server yoki Telegram xatosi'));
         state.debtors = state.debtors.filter(item => item.id !== debtorId);
         saveData();
