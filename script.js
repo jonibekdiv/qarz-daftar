@@ -899,7 +899,8 @@ async function syncDeleteToServer(debtorId, deletedDebtor = null) {
         updateUI();
         renderDebtors();
         closeModal('detailsModal');
-        showToast('Qarzdor o\'chirildi', 'success');
+        const result = await res.json().catch(() => ({}));
+        showToast(result.telegramSent === false ? 'Qarzdor o\'chirildi. Telegram xabari yuborilmadi.' : 'Qarzdor o\'chirildi', result.telegramSent === false ? 'error' : 'success');
     } catch (e) { showToast(`O'chirish xabari: ${e.message}`, 'error'); console.info(e); }
 }
 

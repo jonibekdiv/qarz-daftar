@@ -218,7 +218,7 @@ app.post('/api/debtors', async (req, res) => {
             return res.json({ ok: true, telegramSent: true, telegramMessageId: telegramMessage.message_id });
         } catch (error) {
             console.error('Telegram o\'chirish xabari yuborilmadi:', error.message);
-            return res.status(502).json({ error: 'Telegramga o\'chirish xabari yuborilmadi.', details: error.message });
+            return res.json({ ok: true, telegramSent: false, warning: 'Qarzdor o\'chirildi, lekin Telegram xabari yuborilmadi.', details: error.message });
         }
     }
 
