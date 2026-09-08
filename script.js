@@ -5,6 +5,7 @@
 // ---------- O'ZGARUVCHILAR ----------
 const STORAGE_KEY = 'qarz_daftari_data';
 const THEME_KEY = 'qarz_daftari_theme';
+const PROFILE_KEY = 'qarz_daftari_profile';
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
 
 let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTerm: '', filterType: 'all', sortBy: 'newest' };
@@ -32,8 +33,10 @@ const UZBEKISTAN_REGIONS = {
 document.addEventListener('DOMContentLoaded', () => {
     loadTheme();
     loadData();
+    loadProfile();
     updateUI();
     renderDebtors();
+    renderNotifications();
     setDefaultDates();
     setupAddressFields();
     syncFromServer();
@@ -59,6 +62,41 @@ document.getElementById('themeToggle').addEventListener('click', () => {
     updateCharts();
     showToast('Tema o\'zgartirildi 🌓', 'success');
 });
+
+function loadProfile() {
+    try {
+        const profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+        document.getElementById('profileName').value = profile.name || '';
+        document.getElementById('profileCompany').value = profile.company || '';
+        document.getElementById('profileAddress').value = profile.address || '';
+        document.getElementById('profilePhone').value = profile.phone || '';
+        if (profile.company) document.querySelector('.brand-copy small').textContent = profile.company;
+    } catch (error) { console.warn('Profilni yuklashda xatolik:', error); }
+}
+
+function renderNotifications() {
+    const overdue = state.debtors.filter(debtor =>
+        debtor.dueDate && getDaysLeft(debtor.dueDate) < 0 && debtor.status !== 'completed' && Math.max(Number(debtor.amount || 0) - Number(debtor.totalPaid || 0), 0) > 0
+    );
+    const badge = document.querySelector('.notification-btn span');
+    badge.textContent = overdue.length > 9 ? '9+' : overdue.length ? String(overdue.length) : '';
+    badge.style.display = overdue.length ? 'grid' : 'none';
+    const content = document.getElementById('notificationsContent');
+    if (!overdue.length) {
+        content.innerHTML = '<div class="notification-empty"><i data-lucide="circle-check"></i><strong>Hammasi joyida</strong><span>Muddati o\'tgan qarzdorlar yo\'q.</span></div>';
+    } else {
+        content.innerHTML = overdue.map(debtor => {
+            const left = Math.max(Number(debtor.amount || 0) - Number(debtor.totalPaid || 0), 0);
+            const days = Math.abs(getDaysLeft(debtor.dueDate));
+            return `<div class="overdue-notification"><i data-lucide="alarm-clock"></i><div><strong>${escapeFrontend(debtor.fullName)}</strong><span>${days} kun o'tgan · Qolgan: ${formatCurrency(left)}</span><span>Muddat: ${formatDate(debtor.dueDate)}</span></div></div>`;
+        }).join('');
+    }
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function escapeFrontend(value) {
+    return String(value || '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
+}
 
 // ---------- LOCALSTORAGE ----------
 function loadData() {
@@ -165,6 +203,28 @@ function closeModal(id) { document.getElementById(id).classList.remove('active')
 function closeAllModals() {
     document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
 }
+
+let pendingConfirmation = null;
+function requestConfirmation(message, action) {
+    pendingConfirmation = action;
+    document.getElementById('confirmMessage').textContent = message;
+    openModal('confirmModal');
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function cancelConfirmation() {
+    pendingConfirmation = null;
+    closeModal('confirmModal');
+}
+
+document.getElementById('confirmCancelBtn').addEventListener('click', cancelConfirmation);
+document.getElementById('confirmCloseBtn').addEventListener('click', cancelConfirmation);
+document.getElementById('confirmYesBtn').addEventListener('click', () => {
+    const action = pendingConfirmation;
+    pendingConfirmation = null;
+    closeModal('confirmModal');
+    if (action) action();
+});
 
 // ---------- QARZDOR MODAL ----------
 function openDebtorModal(editId = null) {
@@ -477,14 +537,17 @@ function markCompleted(debtorId) {
 
 // ---------- O'CHIRISH ----------
 function deleteDebtor(debtorId) {
-    if (!confirm('Rostdan ham o\'chirmoqchimisiz?')) return;
-    state.debtors = state.debtors.filter(x => x.id !== debtorId);
-    saveData();
-    updateUI();
-    renderDebtors();
-    closeModal('detailsModal');
-    showToast('🗑️ O\'chirildi', 'success');
-    syncDeleteToServer(debtorId);
+    const debtor = state.debtors.find(item => item.id === debtorId);
+    if (!debtor) return;
+    requestConfirmation(`${debtor.fullName} ma'lumotlarini o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`, () => {
+        state.debtors = state.debtors.filter(x => x.id !== debtorId);
+        saveData();
+        updateUI();
+        renderDebtors();
+        closeModal('detailsModal');
+        showToast('Qarzdor o\'chirildi', 'success');
+        syncDeleteToServer(debtorId, debtor);
+    });
 }
 
 // ---------- RENDER QARZDORLAR ----------
@@ -579,6 +642,7 @@ function updateUI() {
     document.getElementById('overdueCount').textContent = overdue;
     document.getElementById('completedCount').textContent = completed;
 
+    renderNotifications();
     updateCharts();
 }
 
@@ -701,6 +765,29 @@ document.getElementById('fabBtn').addEventListener('click', () => openDebtorModa
 // ---------- SOZLAMALAR ----------
 document.getElementById('settingsBtn').addEventListener('click', () => openModal('settingsModal'));
 document.getElementById('settingsCloseBtn').addEventListener('click', () => closeModal('settingsModal'));
+document.querySelector('.profile-btn').addEventListener('click', () => {
+    loadProfile();
+    openModal('profileModal');
+});
+document.getElementById('profileCloseBtn').addEventListener('click', () => closeModal('profileModal'));
+document.getElementById('profileForm').addEventListener('submit', event => {
+    event.preventDefault();
+    const profile = {
+        name: document.getElementById('profileName').value.trim(),
+        company: document.getElementById('profileCompany').value.trim(),
+        address: document.getElementById('profileAddress').value.trim(),
+        phone: document.getElementById('profilePhone').value.trim()
+    };
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    document.querySelector('.brand-copy small').textContent = profile.company || 'Barcha ma\'lumotlar bir joyda';
+    closeModal('profileModal');
+    showToast('Profil ma\'lumotlari saqlandi', 'success');
+});
+document.querySelector('.notification-btn').addEventListener('click', () => {
+    renderNotifications();
+    openModal('notificationsModal');
+});
+document.getElementById('notificationsCloseBtn').addEventListener('click', () => closeModal('notificationsModal'));
 
 // Eksport
 document.getElementById('exportBtn').addEventListener('click', () => {
@@ -803,12 +890,13 @@ async function syncPaymentToServer(debtor) {
     } catch (e) { showToast(`To'lov xabari: ${e.message}`, 'error'); console.info(e); }
 }
 
-async function syncDeleteToServer(debtorId) {
+async function syncDeleteToServer(debtorId, deletedDebtor = null) {
     try {
-        const res = await fetch(API_BASE + '/api/delete-debtor', {
+        const debtor = deletedDebtor || state.debtors.find(item => item.id === debtorId);
+        const res = await fetch(API_BASE + '/api/debtors', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ debtorId })
+            body: JSON.stringify({ debtor, deleteOnly: true })
         });
         if (!res.ok) throw new Error(await apiError(res, 'Server yoki Telegram xatosi'));
     } catch (e) { showToast(`O'chirish xabari: ${e.message}`, 'error'); console.info(e); }

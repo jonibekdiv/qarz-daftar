@@ -210,6 +210,18 @@ app.post('/api/debtors', async (req, res) => {
         return res.status(400).json({ error: 'Qarzdor ma\'lumotlari noto\'g\'ri.' });
     }
 
+    if (req.body.deleteOnly) {
+        state.debtors = state.debtors.filter(item => item.id !== debtor.id);
+        await saveState();
+        try {
+            const telegramMessage = await notify('deleted', debtor);
+            return res.json({ ok: true, telegramSent: true, telegramMessageId: telegramMessage.message_id });
+        } catch (error) {
+            console.error('Telegram o\'chirish xabari yuborilmadi:', error.message);
+            return res.status(502).json({ error: 'Telegramga o\'chirish xabari yuborilmadi.', details: error.message });
+        }
+    }
+
     const validationErrors = validateDebtor(debtor);
     if (validationErrors) {
         return res.status(400).json({ error: validationErrors });

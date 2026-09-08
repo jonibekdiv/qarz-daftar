@@ -27,6 +27,52 @@
     --orange: #fbbf24;
     --shadow: 0 14px 36px rgba(0, 0, 0, .24);
 }
+.notification-btn span { min-width: 16px; width: auto; height: 16px; padding: 0 4px; place-items: center; font-size: 9px; line-height: 1; color: white; }
+.confirm-message { margin: 4px 0 18px; padding: 14px; border-radius: 14px; background: var(--bg); color: var(--text2); line-height: 1.5; }
+#confirmTitle svg { color: var(--red); }
+#confirmModal .form-actions { margin-top: 0; }
+
+@media (max-width: 600px) {
+    .bottom-nav {
+        left: 9px !important;
+        right: 9px !important;
+        width: auto !important;
+        max-width: none !important;
+        transform: none !important;
+        justify-content: space-between;
+    }
+    .bottom-nav .nav-btn { flex: 1; min-width: 0; padding-left: 3px; padding-right: 3px; }
+    .fab { display: none !important; }
+    .bottom-nav .nav-btn[data-page="add"] { position: relative; z-index: 2; }
+    .bottom-nav .nav-btn[data-page="add"] svg {
+        width: 52px;
+        height: 52px;
+        padding: 13px;
+        margin-top: -27px;
+        border: 4px solid var(--card);
+        border-radius: 50%;
+        background: var(--blue);
+        color: white;
+        stroke-width: 2.4;
+        box-shadow: 0 8px 20px rgba(37, 99, 235, .3);
+    }
+    .bottom-nav .nav-btn[data-page="add"] span { margin-top: 3px; }
+}
+
+/* Final mobile dashboard alignment */
+@media (max-width: 600px) {
+    .bottom-nav {
+        left: 9px;
+        right: 9px;
+        width: auto;
+        max-width: none;
+        transform: none;
+        border-radius: 22px 22px 0 0;
+        justify-content: space-between;
+    }
+    .bottom-nav .nav-btn { flex: 1; min-width: 0; padding-left: 3px; padding-right: 3px; }
+    .bottom-nav .nav-btn span { white-space: nowrap; }
+}
 
 /* iOS dashboard layout */
 .top-bar { padding: 14px 20px; }
@@ -39,6 +85,17 @@
 .notification-btn span { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--red); border: 2px solid var(--card); }
 .profile-btn { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: color-mix(in srgb, var(--blue) 12%, var(--card)); color: var(--blue); }
 .profile-btn svg { width: 21px; height: 21px; }
+.profile-form { display: flex; flex-direction: column; gap: 2px; }
+.profile-avatar { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 20px; background: color-mix(in srgb, var(--blue) 14%, var(--card)); color: var(--blue); }
+.profile-avatar svg { width: 30px; height: 30px; }
+.profile-form > .btn { width: 100%; margin-top: 8px; }
+.notifications-content { display: flex; flex-direction: column; gap: 10px; }
+.notification-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 14px; color: var(--text2); text-align: center; }
+.notification-empty svg { width: 34px; height: 34px; color: var(--green); }
+.overdue-notification { display: flex; align-items: flex-start; gap: 11px; padding: 13px; border: 1px solid color-mix(in srgb, var(--red) 25%, var(--border)); border-radius: 14px; background: color-mix(in srgb, var(--red) 7%, var(--card)); }
+.overdue-notification > svg { width: 20px; min-width: 20px; color: var(--red); margin-top: 2px; }
+.overdue-notification strong { display: block; font-size: 14px; }
+.overdue-notification span { display: block; color: var(--text2); font-size: 12px; margin-top: 4px; }
 .container { max-width: 1120px; padding: 24px 20px 116px; }
 .stats-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
 .stat-card { min-height: 112px; padding: 17px; border-radius: 18px; position: relative; overflow: hidden; }
@@ -72,8 +129,8 @@
     .stat-value { font-size: 20px; }
     .brand-copy strong { font-size: 18px; }
     .brand-copy small { font-size: 11px; }
-    .top-actions .themeToggle, .top-actions #settingsBtn { display: none; }
-    .top-actions #themeToggle, .top-actions #settingsBtn { display: none; }
+    .top-actions #settingsBtn { display: none; }
+    .top-actions #themeToggle { display: flex; }
     .top-actions { gap: 6px; }
     .bottom-nav { width: calc(100% - 18px); }
     .nav-btn { padding: 5px 8px; min-width: 58px; }

@@ -176,9 +176,9 @@
     <div id="confirmModal" class="modal">
         <div class="modal-overlay"></div>
         <div class="modal-content modal-small">
-            <div class="modal-header"><h2 id="confirmTitle">Tasdiqlash</h2></div>
+            <div class="modal-header"><h2 id="confirmTitle"><i data-lucide="triangle-alert"></i> Tasdiqlash</h2><button class="modal-close" id="confirmCloseBtn" aria-label="Yopish"><i data-lucide="x"></i></button></div>
             <p id="confirmMessage" class="confirm-message"></p>
-            <div class="form-actions"><button class="btn btn-secondary" id="confirmCancelBtn">Bekor</button><button class="btn btn-danger" id="confirmYesBtn">Tasdiqlash</button></div>
+            <div class="form-actions"><button class="btn btn-secondary" id="confirmCancelBtn"><i data-lucide="x"></i> Bekor</button><button class="btn btn-danger" id="confirmYesBtn"><i data-lucide="trash-2"></i> O'chirish</button></div>
         </div>
     </div>
 
@@ -197,6 +197,29 @@
                 <button class="btn btn-secondary" id="restoreBtn">♻️ Zaxiradan tiklash</button>
                 <button class="btn btn-danger" id="clearAllBtn">🗑️ Barcha ma'lumotlarni o'chirish</button>
             </div>
+        </div>
+    </div>
+
+    <div id="profileModal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header"><h2><i data-lucide="user-round-cog"></i> Profil ma'lumotlari</h2><button class="modal-close" id="profileCloseBtn" aria-label="Yopish"><i data-lucide="x"></i></button></div>
+            <form id="profileForm" class="profile-form">
+                <div class="profile-avatar"><i data-lucide="user-round"></i></div>
+                <div class="form-group"><label for="profileName">Ism-familiya</label><input id="profileName" type="text" placeholder="Jasur Karimov" /></div>
+                <div class="form-group"><label for="profileCompany">Kompaniya nomi</label><input id="profileCompany" type="text" placeholder="Kompaniya nomi" /></div>
+                <div class="form-group"><label for="profileAddress">Manzil</label><input id="profileAddress" type="text" placeholder="Toshkent shahri" /></div>
+                <div class="form-group"><label for="profilePhone">Telefon raqami</label><input id="profilePhone" type="tel" placeholder="+998 90 123 45 67" /></div>
+                <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Profilni saqlash</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="notificationsModal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header"><h2><i data-lucide="bell-ring"></i> Bildirishnomalar</h2><button class="modal-close" id="notificationsCloseBtn" aria-label="Yopish"><i data-lucide="x"></i></button></div>
+            <div id="notificationsContent" class="notifications-content"></div>
         </div>
     </div>
 
