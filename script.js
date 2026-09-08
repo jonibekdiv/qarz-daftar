@@ -541,12 +541,6 @@ function deleteDebtor(debtorId) {
     const debtor = state.debtors.find(item => item.id === debtorId);
     if (!debtor) return;
     requestConfirmation(`${debtor.fullName} ma'lumotlarini o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`, () => {
-        state.debtors = state.debtors.filter(x => x.id !== debtorId);
-        saveData();
-        updateUI();
-        renderDebtors();
-        closeModal('detailsModal');
-        showToast('Qarzdor o\'chirildi', 'success');
         syncDeleteToServer(debtorId, debtor);
     });
 }
@@ -900,6 +894,12 @@ async function syncDeleteToServer(debtorId, deletedDebtor = null) {
             body: JSON.stringify({ debtor, deleteOnly: true })
         });
         if (!res.ok) throw new Error(await apiError(res, 'Server yoki Telegram xatosi'));
+        state.debtors = state.debtors.filter(item => item.id !== debtorId);
+        saveData();
+        updateUI();
+        renderDebtors();
+        closeModal('detailsModal');
+        showToast('Qarzdor o\'chirildi', 'success');
     } catch (e) { showToast(`O'chirish xabari: ${e.message}`, 'error'); console.info(e); }
 }
 
@@ -923,7 +923,7 @@ async function syncFromServer() {
         const res = await fetch(API_BASE + '/api/debtors');
         if (!res.ok) return;
         const data = await res.json();
-        if (data.debtors && data.debtors.length) {
+        if (Array.isArray(data.debtors)) {
             state.debtors = data.debtors;
             saveData();
             updateUI();
