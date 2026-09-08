@@ -410,6 +410,8 @@ input, select, textarea { font: inherit; }
     grid-template-columns: 1fr 1fr;
     gap: 14px;
 }
+.address-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.address-fields .form-group:last-child { grid-column: 1 / -1; }
 .form-actions {
     display: flex;
     gap: 12px;
@@ -504,6 +506,8 @@ input, select, textarea { font: inherit; }
     .chart-box canvas { height: 220px !important; }
     .debtor-info { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
+    .address-fields { grid-template-columns: 1fr; gap: 0; }
+    .address-fields .form-group:last-child { grid-column: auto; }
     .modal-content { padding: 16px; }
 }
 @media (max-width: 400px) {

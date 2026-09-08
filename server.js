@@ -125,6 +125,7 @@ function debtorMessage(debtor, action) {
         `<b>${title}</b>`,
         `<b>Ism:</b> ${escapeHtml(debtor.fullName)}`,
         `<b>Telefon:</b> ${escapeHtml(debtor.phone)}`,
+        `<b>Manzil:</b> ${escapeHtml([debtor.province, debtor.district, debtor.mahalla].filter(Boolean).join(', ') || debtor.address || 'Ko\'rsatilmagan')}`,
         `<b>Berilgan summa:</b> ${money(debtor.amount)}`,
         `<b>Jami to\'langan:</b> ${money(debtor.totalPaid)}`,
         `<b>Qolgan qarz:</b> ${money(remaining(debtor))}`,

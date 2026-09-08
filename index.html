@@ -97,7 +97,11 @@
             <form id="debtorForm">
                 <div class="form-group"><label>Ism *</label><input type="text" id="fullName" placeholder="Ali Karimov" required /></div>
                 <div class="form-group"><label>Telefon *</label><input type="tel" id="phone" placeholder="+998 90 123 45 67" required /></div>
-                <div class="form-group"><label>Manzil</label><input type="text" id="address" placeholder="Toshkent, Chilonzor 8" /></div>
+                <div class="address-fields">
+                    <div class="form-group"><label for="province">Viloyat</label><select id="province"><option value="">Viloyatni tanlang</option></select></div>
+                    <div class="form-group"><label for="district">Tuman / shahar</label><select id="district" disabled><option value="">Viloyatni tanlang</option></select></div>
+                    <div class="form-group"><label for="mahalla">Mahalla</label><input type="text" id="mahalla" placeholder="Mahalla nomini yozing" /></div>
+                </div>
                 <div class="form-group"><label>Summa (so'm) *</label><input type="number" id="amount" placeholder="1000000" min="0" required /></div>
                 <div class="form-row"><div class="form-group"><label>Berilgan sana *</label><input type="date" id="loanDate" required /></div><div class="form-group"><label>Muddat *</label><input type="date" id="dueDate" required /></div></div>
                 <div class="form-group"><label>Holati</label><select id="status"><option value="active">Faol</option><option value="partial">Qisman</option><option value="completed">To'liq</option><option value="overdue">Muddati o'tgan</option></select></div>

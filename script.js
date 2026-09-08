@@ -11,6 +11,23 @@ let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTer
 let searchTimeout = null;
 let chartStatus = null, chartMonthly = null;
 
+const UZBEKISTAN_REGIONS = {
+    'Qoraqalpog\'iston Respublikasi': ['Amudaryo', 'Beruniy', 'Bo\'zatov', 'Chimboy', 'Ellikqala', 'Kegeyli', 'Mo\'ynoq', 'Nukus', 'Qanliko\'l', 'Qo\'ng\'irot', 'Qorao\'zak', 'Shumanay', 'Taxtako\'pir', 'To\'rtko\'l', 'Xo\'jayli', 'Shumanay'],
+    'Andijon viloyati': ['Andijon', 'Asaka', 'Baliqchi', 'Bo\'ston', 'Buloqboshi', 'Izboskan', 'Jalaquduq', 'Marhamat', 'Paxtaobod', ' Qo\'rg\'ontepa', 'Shahrixon', 'Ulug\'nor', 'Xo\'jaobod', 'Xonobod'],
+    'Buxoro viloyati': ['Buxoro', 'G\'ijduvon', 'Jondor', 'Kogon', 'Olot', 'Peshku', 'Qorako\'l', 'Qorovulbozor', 'Romitan', 'Shofirkon', 'Vobkent'],
+    'Jizzax viloyati': ['Arnasoy', 'Baxmal', 'Do\'stlik', 'Forish', 'G\'allaorol', 'Jizzax', 'Mirzacho\'l', 'Paxtakor', 'Sharof Rashidov', 'Yangiobod', 'Zarbdor', 'Zomin'],
+    'Qashqadaryo viloyati': ['Chiroqchi', 'Dehqonobod', 'G\'uzor', 'Kasbi', 'Kitob', 'Koson', 'Mirishkor', 'Muborak', 'Nishon', 'Qamashi', 'Qarshi', 'Shahrisabz', 'Yakkabog\''],
+    'Navoiy viloyati': ['Karmana', 'Konimex', 'Navbahor', 'Navoiy', 'Nurota', 'Qiziltepa', 'Tomdi', 'Uchquduq', 'Xatirchi'],
+    'Namangan viloyati': ['Chortoq', 'Chust', 'Kosonsoy', 'Mingbuloq', 'Namangan', 'Norin', 'Pop', 'To\'raqo\'rg\'on', 'Uchqo\'rg\'on', 'Uychi', 'Yangiqo\'rg\'on'],
+    'Samarqand viloyati': ['Bulung\'ur', 'Ishtixon', 'Jomboy', 'Kattaqo\'rg\'on', 'Narpay', 'Nurobod', 'Oqdaryo', 'Pastdarg\'om', 'Payariq', 'Paxtachi', 'Samarqand', 'Toyloq', 'Urgut'],
+    'Surxondaryo viloyati': ['Angor', 'Bandixon', 'Boysun', 'Denov', 'Jarqo\'rg\'on', 'Muzrabot', 'Oltinsoy', 'Qiziriq', 'Qumqo\'rg\'on', 'Sariosiyo', 'Sherobod', 'Sho\'rchi', 'Termiz', 'Uzun'],
+    'Sirdaryo viloyati': ['Boyovut', 'Guliston', 'Mirzaobod', 'Oqoltin', 'Sayxunobod', 'Sardoba', 'Shirin', 'Sirdaryo', 'Xovos'],
+    'Toshkent viloyati': ['Angren', 'Bekobod', 'Bo\'ka', 'Bo\'stonliq', 'Chinoz', 'Ohangaron', 'Oqqo\'rg\'on', 'Parkent', 'Piskent', 'Quyi Chirchiq', 'Toshkent', 'Uchquduq', 'Yuqori Chirchiq', 'Zangiota', 'Yangiyo\'l'],
+    'Farg\'ona viloyati': ['Bag\'dod', 'Beshariq', 'Buvayda', 'Dang\'ara', 'Farg\'ona', 'Furqat', 'Oltiariq', 'Qo\'qon', 'Quva', 'Quvasoy', 'Rishton', 'So\'x', 'Toshloq', 'Uchko\'prik', 'Yozyovon'],
+    'Xorazm viloyati': ['Bog\'ot', 'Gurlan', 'Hazorasp', 'Xiva', 'Xonqa', 'Qo\'shko\'pir', 'Shovot', 'Tuproqqal\'a', 'Urganch', 'Yangiariq', 'Yangibozor'],
+    'Toshkent shahri': ['Bektemir', 'Chilonzor', 'Mirobod', 'Mirzo Ulug\'bek', 'Olmazor', 'Sergeli', 'Shayxontohur', 'Uchtepa', 'Yakkasaroy', 'Yashnobod', 'Yunusobod'],
+};
+
 // ---------- BOSHLANG'ICH ----------
 document.addEventListener('DOMContentLoaded', () => {
     loadTheme();
@@ -18,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateUI();
     renderDebtors();
     setDefaultDates();
+    setupAddressFields();
     syncFromServer();
     if (window.lucide) window.lucide.createIcons();
 });
@@ -119,6 +137,28 @@ function setDefaultDates() {
     document.getElementById('paymentDate').value = fmt(now);
 }
 
+function setupAddressFields() {
+    const province = document.getElementById('province');
+    const district = document.getElementById('district');
+    Object.keys(UZBEKISTAN_REGIONS).forEach(region => province.add(new Option(region, region)));
+    province.addEventListener('change', () => {
+        const districts = UZBEKISTAN_REGIONS[province.value] || [];
+        district.innerHTML = '<option value="">Tuman / shaharni tanlang</option>';
+        districts.forEach(item => district.add(new Option(item.trim(), item.trim())));
+        district.disabled = districts.length === 0;
+    });
+}
+
+function setAddressFields(debtor) {
+    const province = document.getElementById('province');
+    const district = document.getElementById('district');
+    const legacyAddress = String(debtor.address || '');
+    province.value = debtor.province || '';
+    province.dispatchEvent(new Event('change'));
+    district.value = debtor.district || '';
+    document.getElementById('mahalla').value = debtor.mahalla || (!debtor.district ? legacyAddress : '');
+}
+
 // ---------- MODALLAR ----------
 function openModal(id) { document.getElementById(id).classList.add('active'); }
 function closeModal(id) { document.getElementById(id).classList.remove('active'); }
@@ -131,6 +171,10 @@ function openDebtorModal(editId = null) {
     state.currentEditId = editId;
     const form = document.getElementById('debtorForm');
     form.reset();
+    document.getElementById('province').value = '';
+    document.getElementById('district').innerHTML = '<option value="">Avval viloyatni tanlang</option>';
+    document.getElementById('district').disabled = true;
+    document.getElementById('mahalla').value = '';
     document.querySelectorAll('.error-message').forEach(el => el.classList.remove('show'));
     document.getElementById('modalTitle').textContent = editId ? '✏️ Qarzdorni tahrirlash' : '➕ Yangi qarzdor';
     setDefaultDates();
@@ -140,7 +184,7 @@ function openDebtorModal(editId = null) {
         if (d) {
             document.getElementById('fullName').value = d.fullName || '';
             document.getElementById('phone').value = d.phone || '';
-            document.getElementById('address').value = d.address || '';
+            setAddressFields(d);
             document.getElementById('amount').value = d.amount || '';
             document.getElementById('loanDate').value = d.loanDate || '';
             document.getElementById('dueDate').value = d.dueDate || '';
@@ -158,7 +202,10 @@ document.getElementById('debtorForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const name = document.getElementById('fullName').value.trim();
     const phone = document.getElementById('phone').value.trim();
-    const address = document.getElementById('address').value.trim();
+    const province = document.getElementById('province').value;
+    const district = document.getElementById('district').value;
+    const mahalla = document.getElementById('mahalla').value.trim();
+    const address = [province, district, mahalla].filter(Boolean).join(', ');
     const amount = parseFloat(document.getElementById('amount').value);
     const loanDate = document.getElementById('loanDate').value;
     const dueDate = document.getElementById('dueDate').value;
@@ -181,14 +228,14 @@ document.getElementById('debtorForm').addEventListener('submit', (e) => {
     if (state.currentEditId) {
         const d = state.debtors.find(x => x.id === state.currentEditId);
         if (d) {
-            d.fullName = name; d.phone = phone; d.address = address; d.amount = amount;
+            d.fullName = name; d.phone = phone; d.address = address; d.province = province; d.district = district; d.mahalla = mahalla; d.amount = amount;
             d.loanDate = loanDate; d.dueDate = dueDate; d.status = status; d.notes = notes;
             d.updatedAt = new Date().toISOString();
         }
         showToast('✅ Yangilandi', 'success');
     } else {
         const newD = {
-            id: generateId(), fullName: name, phone, address, amount,
+            id: generateId(), fullName: name, phone, address, province, district, mahalla, amount,
             loanDate, dueDate, status, notes,
             totalPaid: 0, payments: [],
             createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
