@@ -6,7 +6,8 @@
 const STORAGE_KEY = 'qarz_daftari_data';
 const THEME_KEY = 'qarz_daftari_theme';
 const PROFILE_KEY = 'qarz_daftari_profile';
-const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE = isLocalHost ? 'http://localhost:3000' : '';
 
 let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTerm: '', filterType: 'all', sortBy: 'newest' };
 let searchTimeout = null;
