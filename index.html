@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="uz">
 <head>
@@ -6,11 +8,10 @@
     <title>Qarz Daftari</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-
+ 
     <!-- ==================== TOP BAR ==================== -->
     <div class="top-bar">
         <div class="top-bar-inner">
@@ -23,10 +24,10 @@
             </div>
         </div>
     </div>
-
+ 
     <!-- ==================== MAIN ==================== -->
     <div class="container">
-
+ 
         <!-- ===== STATISTIKA KARTALARI ===== -->
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card"><span class="stat-label"><i data-lucide="users"></i> Qarzdorlar</span><span class="stat-value" id="totalDebtors">0</span></div>
@@ -36,13 +37,13 @@
             <div class="stat-card"><span class="stat-label"><i data-lucide="alarm-clock"></i> Muddati o'tgan</span><span class="stat-value" id="overdueCount">0</span></div>
             <div class="stat-card"><span class="stat-label"><i data-lucide="badge-check"></i> To'liq to'langan</span><span class="stat-value" id="completedCount">0</span></div>
         </div>
-
+ 
         <!-- ===== GRAFIKLAR ===== -->
         <div class="charts-row">
             <div class="chart-box chart-status-box"><h4>Qarz holati</h4><div class="chart-center-label"><strong id="statusTotal">0</strong><span>jami yozuv</span></div><canvas id="statusChart" height="130"></canvas></div>
             <div class="chart-box"><h4>Oylik to'lovlar</h4><canvas id="monthlyChart" height="130"></canvas></div>
         </div>
-
+ 
         <!-- ===== QIDIRUV VA FILTR ===== -->
         <div class="search-section">
             <div class="search-box">
@@ -62,7 +63,7 @@
                 <button class="sort-btn" data-sort="dueDate"><i data-lucide="calendar-days"></i> Muddat</button>
             </div>
         </div>
-
+ 
         <!-- ===== QARZDORLAR RO'YXATI ===== -->
         <div class="debtors-section">
             <h2>Qarzdorlar</h2>
@@ -70,12 +71,12 @@
                 <div class="empty-state"><i data-lucide="inbox"></i><strong>Hozircha qarzdor yo'q</strong><span>Yangi yozuv qo'shishdan boshlang.</span></div>
             </div>
         </div>
-
+ 
         <!-- ===== YANGI QARZDOR TUGMASI ===== -->
         <button class="fab" id="fabBtn" title="Qarzdor qo'shish" aria-label="Qarzdor qo'shish"><i data-lucide="plus"></i></button>
-
+ 
     </div>
-
+ 
     <!-- ==================== MOBIL NAV ==================== -->
     <div class="bottom-nav">
         <button class="nav-btn active" data-page="home"><i data-lucide="house"></i><span>Bosh</span></button>
@@ -84,11 +85,11 @@
         <button class="nav-btn" data-page="stats"><i data-lucide="calendar-days"></i><span>Hisobotlar</span></button>
         <button class="nav-btn" data-page="settings"><i data-lucide="settings-2"></i><span>Sozlamalar</span></button>
     </div>
-
+ 
     <!-- ========================================================== -->
     <!-- ==================== MODALLAR ============================= -->
     <!-- ========================================================== -->
-
+ 
     <!-- ===== QARZDOR QO'SHISH/TAHRIRLASH MODAL ===== -->
     <div id="debtorModal" class="modal">
         <div class="modal-overlay"></div>
@@ -113,7 +114,7 @@
             </form>
         </div>
     </div>
-
+ 
     <!-- ===== QARZDOR DETALLARI MODAL ===== -->
     <div id="detailsModal" class="modal">
         <div class="modal-overlay"></div>
@@ -122,26 +123,23 @@
             <div id="detailsContent" class="details-container"></div>
         </div>
     </div>
-
-    <!-- ===== TO'LOV QO'SHISH MODAL (FOTO VA PDF BILAN) ===== -->
+ 
+    <!-- ===== TO'LOV QO'SHISH MODAL ===== -->
     <div id="paymentModal" class="modal">
         <div class="modal-overlay"></div>
         <div class="modal-content">
             <div class="modal-header"><h2><i data-lucide="credit-card"></i> To'lov qo'shish</h2><button class="modal-close" id="paymentCloseBtn" aria-label="Yopish"><i data-lucide="x"></i></button></div>
             <form id="paymentForm">
-                <!-- Summa -->
                 <div class="form-group">
                     <label>To'lov summasi (so'm) *</label>
                     <input type="number" id="paymentAmount" placeholder="0" min="0" required />
                     <small id="paymentMaxHint" style="color:var(--text-tertiary);font-size:12px;">Maksimum: 0 so'm</small>
                     <span class="error-message" id="paymentError"></span>
                 </div>
-                <!-- Sana -->
                 <div class="form-group">
                     <label>To'lov sanasi *</label>
                     <input type="date" id="paymentDate" required />
                 </div>
-                <!-- Usul -->
                 <div class="form-group">
                     <label>To'lov usuli</label>
                     <select id="paymentMethod">
@@ -152,18 +150,6 @@
                         <option value="other">Boshqa</option>
                     </select>
                 </div>
-
-                <!-- ====== FAYL YUKLASH (RASM + PDF) ====== -->
-                <div class="form-group">
-                    <label><i data-lucide="paperclip"></i> Chek / Kvitansiya (rasm yoki PDF)</label>
-                    <div class="file-upload-area" id="fileDropArea">
-                        <span><i data-lucide="upload-cloud"></i> Faylni bu yerga tashlang yoki <strong>tanlang</strong></span>
-                        <input type="file" id="paymentFile" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" multiple />
-                        <div id="filePreviewList" class="file-preview-list"></div>
-                    </div>
-                    <small style="color:var(--text-tertiary);font-size:12px;">JPG, PNG, PDF (maks 5 MB)</small>
-                </div>
-
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" id="paymentCancelBtn">Bekor</button>
                     <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> To'lovni qo'shish</button>
@@ -171,7 +157,7 @@
             </form>
         </div>
     </div>
-
+ 
     <!-- ===== TASDIQLASH MODAL ===== -->
     <div id="confirmModal" class="modal">
         <div class="modal-overlay"></div>
@@ -181,7 +167,7 @@
             <div class="form-actions"><button class="btn btn-secondary" id="confirmCancelBtn"><i data-lucide="x"></i> Bekor</button><button class="btn btn-danger" id="confirmYesBtn"><i data-lucide="trash-2"></i> O'chirish</button></div>
         </div>
     </div>
-
+ 
     <!-- ===== SOZLAMALAR MODAL ===== -->
     <div id="settingsModal" class="modal">
         <div class="modal-overlay"></div>
@@ -199,7 +185,7 @@
             </div>
         </div>
     </div>
-
+ 
     <div id="profileModal" class="modal">
         <div class="modal-overlay"></div>
         <div class="modal-content">
@@ -214,7 +200,7 @@
             </form>
         </div>
     </div>
-
+ 
     <div id="notificationsModal" class="modal">
         <div class="modal-overlay"></div>
         <div class="modal-content">
@@ -222,14 +208,15 @@
             <div id="notificationsContent" class="notifications-content"></div>
         </div>
     </div>
-
+ 
     <!-- ===== TOAST ===== -->
     <div id="toast" class="toast"></div>
-
+ 
     <!-- ===== YASHIRIN INPUTLAR ===== -->
     <input type="file" id="fileInput" accept=".json" style="display:none;" />
     <input type="file" id="restoreFileInput" accept=".json" style="display:none;" />
-
-    <script src="script.js?v=20260910"></script>
+ 
+    <script src="script.js"></script>
 </body>
 </html>
+ 

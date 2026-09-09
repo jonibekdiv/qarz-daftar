@@ -1,23 +1,19 @@
 // ============================================================
-//  QARZ DAFTARI – BARCHA FUNKSIYALAR
+//  QARZ DAFTARI – BARCHA FUNKSIYALAR (TELEGRAM CHIQARILGAN)
 // ============================================================
 
 // ---------- O'ZGARUVCHILAR ----------
 const STORAGE_KEY = 'qarz_daftari_data';
 const THEME_KEY = 'qarz_daftari_theme';
 const PROFILE_KEY = 'qarz_daftari_profile';
-const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const API_BASE = isLocalHost ? 'http://127.0.0.1:3000' : '';
 
 let state = { debtors: [], currentEditId: null, currentDebtorId: null, searchTerm: '', filterType: 'all', sortBy: 'newest' };
 let searchTimeout = null;
 let chartStatus = null, chartMonthly = null;
-let localMutationVersion = 0;
-const pendingDebtorRequests = new Set();
 
 const UZBEKISTAN_REGIONS = {
-    'Qoraqalpog\'iston Respublikasi': ['Amudaryo', 'Beruniy', 'Bo\'zatov', 'Chimboy', 'Ellikqala', 'Kegeyli', 'Mo\'ynoq', 'Nukus', 'Qanliko\'l', 'Qo\'ng\'irot', 'Qorao\'zak', 'Shumanay', 'Taxtako\'pir', 'To\'rtko\'l', 'Xo\'jayli', 'Shumanay'],
-    'Andijon viloyati': ['Andijon', 'Asaka', 'Baliqchi', 'Bo\'ston', 'Buloqboshi', 'Izboskan', 'Jalaquduq', 'Marhamat', 'Paxtaobod', ' Qo\'rg\'ontepa', 'Shahrixon', 'Ulug\'nor', 'Xo\'jaobod', 'Xonobod'],
+    'Qoraqalpog\'iston Respublikasi': ['Amudaryo', 'Beruniy', 'Bo\'zatov', 'Chimboy', 'Ellikqala', 'Kegeyli', 'Mo\'ynoq', 'Nukus', 'Qanliko\'l', 'Qo\'ng\'irot', 'Qorao\'zak', 'Shumanay', 'Taxtako\'pir', 'To\'rtko\'l', 'Xo\'jayli'],
+    'Andijon viloyati': ['Andijon', 'Asaka', 'Baliqchi', 'Bo\'ston', 'Buloqboshi', 'Izboskan', 'Jalaquduq', 'Marhamat', 'Paxtaobod', 'Qo\'rg\'ontepa', 'Shahrixon', 'Ulug\'nor', 'Xo\'jaobod', 'Xonobod'],
     'Buxoro viloyati': ['Buxoro', 'G\'ijduvon', 'Jondor', 'Kogon', 'Olot', 'Peshku', 'Qorako\'l', 'Qorovulbozor', 'Romitan', 'Shofirkon', 'Vobkent'],
     'Jizzax viloyati': ['Arnasoy', 'Baxmal', 'Do\'stlik', 'Forish', 'G\'allaorol', 'Jizzax', 'Mirzacho\'l', 'Paxtakor', 'Sharof Rashidov', 'Yangiobod', 'Zarbdor', 'Zomin'],
     'Qashqadaryo viloyati': ['Chiroqchi', 'Dehqonobod', 'G\'uzor', 'Kasbi', 'Kitob', 'Koson', 'Mirishkor', 'Muborak', 'Nishon', 'Qamashi', 'Qarshi', 'Shahrisabz', 'Yakkabog\''],
@@ -42,7 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderNotifications();
     setDefaultDates();
     setupAddressFields();
-    syncFromServer();
     if (window.lucide) window.lucide.createIcons();
 });
 
@@ -57,6 +52,7 @@ function loadTheme() {
         document.documentElement.setAttribute('data-theme', saved);
     }
 }
+
 document.getElementById('themeToggle').addEventListener('click', () => {
     const current = document.documentElement.getAttribute('data-theme');
     const next = current === 'light' ? 'dark' : 'light';
@@ -137,26 +133,18 @@ function generateId() {
 function formatCurrency(amount) {
     return new Intl.NumberFormat('uz-UZ').format(Math.round(amount || 0)) + ' so\'m';
 }
+
 function formatDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T12:00:00');
     return new Intl.DateTimeFormat('uz-UZ', { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
 }
+
 function getDaysLeft(dueDate) {
-    const today = new Date(); today.setHours(0,0,0,0);
+    const today = new Date(); 
+    today.setHours(0,0,0,0);
     const due = new Date(dueDate + 'T12:00:00');
     return Math.ceil((due - today) / 86400000);
-}
-function formatPhone(raw) {
-    let digits = raw.replace(/\D/g, '');
-    if (digits.startsWith('998')) digits = digits.slice(3);
-    digits = digits.slice(0, 9);
-    const parts = [];
-    if (digits.length > 0) parts.push(digits.slice(0,2));
-    if (digits.length > 2) parts.push(digits.slice(2,5));
-    if (digits.length > 5) parts.push(digits.slice(5,7));
-    if (digits.length > 7) parts.push(digits.slice(7,9));
-    return '+998 ' + parts.join(' ');
 }
 
 // ---------- TOAST ----------
@@ -171,7 +159,8 @@ function showToast(msg, type = 'info') {
 // ---------- DEFAULTS ----------
 function setDefaultDates() {
     const now = new Date();
-    const later = new Date(now); later.setDate(later.getDate() + 30);
+    const later = new Date(now); 
+    later.setDate(later.getDate() + 30);
     const fmt = d => d.toISOString().split('T')[0];
     document.getElementById('loanDate').value = fmt(now);
     document.getElementById('dueDate').value = fmt(later);
@@ -313,7 +302,6 @@ document.getElementById('debtorForm').addEventListener('submit', (e) => {
     updateUI();
     renderDebtors();
     closeModal('debtorModal');
-    syncDebtorToServer(state.debtors.find(item => item.id === (state.currentEditId || state.debtors[state.debtors.length - 1]?.id)), state.currentEditId ? 'updated' : 'created');
 });
 
 // ---------- PAYMENT MODAL ----------
@@ -328,56 +316,11 @@ function openPaymentModal(debtorId) {
     document.getElementById('paymentForm').reset();
     document.getElementById('paymentError').classList.remove('show');
     document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
-    // Fayl preview tozalash
-    document.getElementById('filePreviewList').innerHTML = '';
-    document.getElementById('paymentFile').value = '';
     openModal('paymentModal');
 }
 
 document.getElementById('paymentCloseBtn').addEventListener('click', () => closeModal('paymentModal'));
 document.getElementById('paymentCancelBtn').addEventListener('click', () => closeModal('paymentModal'));
-
-// ---------- FAYL YUKLASH (RASM + PDF) ----------
-document.getElementById('paymentFile').addEventListener('change', function(e) {
-    const container = document.getElementById('filePreviewList');
-    container.innerHTML = '';
-    const files = Array.from(this.files);
-    files.forEach((file, idx) => {
-        const div = document.createElement('div');
-        div.className = 'file-preview-item';
-        const icon = file.type.startsWith('image/') ? '🖼️' : '📄';
-        const size = (file.size / 1024).toFixed(0) + ' KB';
-        div.innerHTML = `${icon} ${file.name} (${size}) <span class="remove-file" data-idx="${idx}">✕</span>`;
-        container.appendChild(div);
-    });
-    // Remove handler
-    container.querySelectorAll('.remove-file').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const idx = parseInt(this.dataset.idx);
-            const dt = new DataTransfer();
-            const input = document.getElementById('paymentFile');
-            const files = Array.from(input.files);
-            files.forEach((f, i) => { if (i !== idx) dt.items.add(f); });
-            input.files = dt.files;
-            input.dispatchEvent(new Event('change'));
-        });
-    });
-});
-
-// Drag & Drop qo'llab-quvvatlash
-const dropArea = document.getElementById('fileDropArea');
-['dragenter', 'dragover'].forEach(ev => dropArea.addEventListener(ev, e => { e.preventDefault(); dropArea.style.borderColor = 'var(--blue)'; }));
-['dragleave', 'drop'].forEach(ev => dropArea.addEventListener(ev, e => { e.preventDefault(); dropArea.style.borderColor = ''; }));
-dropArea.addEventListener('drop', function(e) {
-    e.preventDefault();
-    const files = e.dataTransfer.files;
-    const input = document.getElementById('paymentFile');
-    const dt = new DataTransfer();
-    Array.from(input.files).forEach(f => dt.items.add(f));
-    Array.from(files).forEach(f => dt.items.add(f));
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change'));
-});
 
 // ---------- TO'LOV QO'SHISH ----------
 document.getElementById('paymentForm').addEventListener('submit', function(e) {
@@ -408,28 +351,11 @@ document.getElementById('paymentForm').addEventListener('submit', function(e) {
         return;
     }
 
-    // Fayllarni olish
-    const fileInput = document.getElementById('paymentFile');
-    const files = Array.from(fileInput.files);
-    const fileData = files.map(f => ({
-        name: f.name,
-        type: f.type,
-        size: f.size,
-        // Aslida faylni saqlash uchun backend kerak, lekin frontendda faqat metama'lumot saqlaymiz
-        // Biz faylni base64 ga o'girib saqlashimiz mumkin (kichik fayllar uchun)
-        // Lekin bu yerda soddalik uchun faqat nomini saqlaymiz
-        // Haqiqiy fayl yuklash uchun server API kerak
-        // Hozircha fayl ma'lumotlarini xotirada saqlaymiz
-        dataURL: null // realda bu yerda base64 bo'ladi
-    }));
-
-    // To'lovni qo'shish
     d.payments.push({
         id: generateId(),
         amount,
         date,
         method,
-        files: fileData,
         createdAt: new Date().toISOString()
     });
     d.totalPaid += amount;
@@ -442,7 +368,6 @@ document.getElementById('paymentForm').addEventListener('submit', function(e) {
     renderDebtors();
     closeModal('paymentModal');
     showToast('✅ To\'lov qo\'shildi!', 'success');
-    syncPaymentToServer(d);
 });
 
 // ---------- DETALLAR ----------
@@ -485,11 +410,9 @@ function openDetailsModal(debtorId) {
 
     if (d.payments && d.payments.length) {
         d.payments.slice().reverse().forEach(p => {
-            const fileIcons = (p.files && p.files.length) ? `<i data-lucide="paperclip" title="Ilova bor"></i>` : '';
             html += `
                 <div class="payment-item">
                     <div><strong>${formatCurrency(p.amount)}</strong><span>${formatDate(p.date)} · ${methodNames[p.method] || p.method || 'Usul ko\'rsatilmagan'}</span></div>
-                    ${fileIcons}
                 </div>
             `;
         });
@@ -510,6 +433,7 @@ function openDetailsModal(debtorId) {
     if (window.lucide) window.lucide.createIcons();
     openModal('detailsModal');
 }
+
 document.getElementById('detailsCloseBtn').addEventListener('click', () => closeModal('detailsModal'));
 
 // ---------- TO'LIQ TO'LOV ----------
@@ -523,7 +447,6 @@ function markCompleted(debtorId) {
             amount: remaining,
             date: new Date().toISOString().split('T')[0],
             method: 'completed',
-            files: [],
             createdAt: new Date().toISOString()
         });
         d.totalPaid = d.amount;
@@ -535,7 +458,6 @@ function markCompleted(debtorId) {
     renderDebtors();
     if (document.getElementById('detailsModal').classList.contains('active')) openDetailsModal(debtorId);
     showToast('✅ Qarz to\'liq to\'landi!', 'success');
-    syncPaymentToServer(d);
 }
 
 // ---------- O'CHIRISH ----------
@@ -543,8 +465,12 @@ function deleteDebtor(debtorId) {
     const debtor = state.debtors.find(item => item.id === debtorId);
     if (!debtor) return;
     requestConfirmation(`${debtor.fullName} ma'lumotlarini o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`, () => {
-        localMutationVersion += 1;
-        syncDeleteToServer(debtorId, debtor);
+        state.debtors = state.debtors.filter(item => item.id !== debtorId);
+        saveData();
+        updateUI();
+        renderDebtors();
+        closeModal('detailsModal');
+        showToast('✅ Qarzdor o\'chirildi', 'success');
     });
 }
 
@@ -666,6 +592,7 @@ function updateCharts() {
     const chartGreen = styles.getPropertyValue('--green').trim();
     const chartRed = styles.getPropertyValue('--red').trim();
     const chartFont = { family: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif' };
+    
     const ctx1 = document.getElementById('statusChart').getContext('2d');
     if (chartStatus) chartStatus.destroy();
     chartStatus = new Chart(ctx1, {
@@ -678,13 +605,13 @@ function updateCharts() {
                 borderWidth: 3,
                 hoverOffset: 8 }]
         },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '72%',
-                animation: { duration: 650, easing: 'easeOutQuart' },
-                plugins: { legend: { position: 'bottom', labels: { color: textColor, boxWidth: 12, boxHeight: 12, padding: 16, font: chartFont } } }
-            }
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '72%',
+            animation: { duration: 650, easing: 'easeOutQuart' },
+            plugins: { legend: { position: 'bottom', labels: { color: textColor, boxWidth: 12, boxHeight: 12, padding: 16, font: chartFont } } }
+        }
     });
 
     // Oylik to'lovlar
@@ -740,7 +667,6 @@ document.querySelectorAll('.sort-btn').forEach(btn => {
         renderDebtors();
     });
 });
-// default sort
 document.querySelector('.sort-btn[data-sort="newest"]')?.classList.add('active');
 
 // ---------- NAVIGATSIYA ----------
@@ -812,7 +738,6 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 updateUI();
                 renderDebtors();
                 showToast('📥 Import muvaffaqiyatli!', 'success');
-                syncToServer();
             } else {
                 showToast('Noto\'g\'ri format', 'error');
             }
@@ -833,9 +758,9 @@ document.getElementById('addDemoBtn').addEventListener('click', () => {
     const d4 = new Date(now); d4.setDate(d4.getDate() + 25);
 
     const demo = [
-        { fullName: 'Ali Karimov', phone: '+998 90 123 45 67', address: 'Toshkent', amount: 5000000, loanDate: d1.toISOString().split('T')[0], dueDate: d3.toISOString().split('T')[0], status: 'overdue', notes: 'Muddati o\'tgan', totalPaid: 2000000, payments: [{ id: generateId(), amount: 2000000, date: new Date(now.getTime()-3*86400000).toISOString().split('T')[0], method: 'cash', files: [], createdAt: new Date().toISOString() }] },
-        { fullName: 'Gulnora Akbarova', phone: '+998 91 234 56 78', address: 'Samarqand', amount: 3500000, loanDate: new Date(now.getTime()-15*86400000).toISOString().split('T')[0], dueDate: d2.toISOString().split('T')[0], status: 'partial', notes: '', totalPaid: 1500000, payments: [{ id: generateId(), amount: 1000000, date: new Date(now.getTime()-10*86400000).toISOString().split('T')[0], method: 'card', files: [], createdAt: new Date().toISOString() }, { id: generateId(), amount: 500000, date: new Date(now.getTime()-5*86400000).toISOString().split('T')[0], method: 'transfer', files: [], createdAt: new Date().toISOString() }] },
-        { fullName: 'Jasur Maxmudov', phone: '+998 99 345 67 89', address: 'Farg\'ona', amount: 2000000, loanDate: new Date(now.getTime()-60*86400000).toISOString().split('T')[0], dueDate: new Date(now.getTime()-10*86400000).toISOString().split('T')[0], status: 'completed', notes: 'To\'liq to\'langan', totalPaid: 2000000, payments: [{ id: generateId(), amount: 2000000, date: new Date(now.getTime()-8*86400000).toISOString().split('T')[0], method: 'transfer', files: [], createdAt: new Date().toISOString() }] },
+        { fullName: 'Ali Karimov', phone: '+998 90 123 45 67', address: 'Toshkent', amount: 5000000, loanDate: d1.toISOString().split('T')[0], dueDate: d3.toISOString().split('T')[0], status: 'overdue', notes: 'Muddati o\'tgan', totalPaid: 2000000, payments: [{ id: generateId(), amount: 2000000, date: new Date(now.getTime()-3*86400000).toISOString().split('T')[0], method: 'cash', createdAt: new Date().toISOString() }] },
+        { fullName: 'Gulnora Akbarova', phone: '+998 91 234 56 78', address: 'Samarqand', amount: 3500000, loanDate: new Date(now.getTime()-15*86400000).toISOString().split('T')[0], dueDate: d2.toISOString().split('T')[0], status: 'partial', notes: '', totalPaid: 1500000, payments: [{ id: generateId(), amount: 1000000, date: new Date(now.getTime()-10*86400000).toISOString().split('T')[0], method: 'card', createdAt: new Date().toISOString() }, { id: generateId(), amount: 500000, date: new Date(now.getTime()-5*86400000).toISOString().split('T')[0], method: 'transfer', createdAt: new Date().toISOString() }] },
+        { fullName: 'Jasur Maxmudov', phone: '+998 99 345 67 89', address: 'Farg\'ona', amount: 2000000, loanDate: new Date(now.getTime()-60*86400000).toISOString().split('T')[0], dueDate: new Date(now.getTime()-10*86400000).toISOString().split('T')[0], status: 'completed', notes: 'To\'liq to\'langan', totalPaid: 2000000, payments: [{ id: generateId(), amount: 2000000, date: new Date(now.getTime()-8*86400000).toISOString().split('T')[0], method: 'transfer', createdAt: new Date().toISOString() }] },
         { fullName: 'Sonya Uzbekova', phone: '+998 88 456 78 90', address: 'Andijon', amount: 4500000, loanDate: now.toISOString().split('T')[0], dueDate: d4.toISOString().split('T')[0], status: 'active', notes: 'Yangi qarz', totalPaid: 0, payments: [] }
     ];
     demo.forEach(d => { d.id = generateId(); d.createdAt = new Date().toISOString(); d.updatedAt = new Date().toISOString(); });
@@ -845,7 +770,6 @@ document.getElementById('addDemoBtn').addEventListener('click', () => {
     renderDebtors();
     closeModal('settingsModal');
     showToast('🧪 Demo ma\'lumot qo\'shildi', 'success');
-    syncToServer();
 });
 
 // Barchasini o'chirish
@@ -857,104 +781,16 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
         renderDebtors();
         closeModal('settingsModal');
         showToast('🗑️ Hammasi o\'chirildi', 'success');
-        syncToServer();
     }
 });
 
-// ---------- SERVER BILAN SINXRON ----------
-async function apiError(response, fallback) {
-    const body = await response.json().catch(() => ({}));
-    return body.details || body.error || `${fallback} (${response.status})`;
-}
-
-async function syncDebtorToServer(debtor, action) {
-    if (!debtor) return;
-    const requestKey = `${debtor.id}:${debtor.updatedAt || ''}:${action}`;
-    if (pendingDebtorRequests.has(requestKey)) return;
-    pendingDebtorRequests.add(requestKey);
-    try {
-        const res = await fetch(API_BASE + '/api/debtors', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ debtor, action })
-        });
-        if (!res.ok) throw new Error(await apiError(res, 'Telegram xatosi'));
-    } catch (e) { showToast(`Telegram: ${e.message}`, 'error'); console.info(e); }
-    finally { pendingDebtorRequests.delete(requestKey); }
-}
-
-async function syncPaymentToServer(debtor) {
-    try {
-        const res = await fetch(API_BASE + '/api/payments', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ debtorId: debtor.id, debtor, payments: debtor.payments, totalPaid: debtor.totalPaid, status: debtor.status })
-        });
-        if (!res.ok) throw new Error(await apiError(res, 'Telegram xatosi'));
-    } catch (e) { showToast(`To'lov xabari: ${e.message}`, 'error'); console.info(e); }
-}
-
-async function syncDeleteToServer(debtorId, deletedDebtor = null) {
-    try {
-        const debtor = deletedDebtor || state.debtors.find(item => item.id === debtorId);
-        const request = () => fetch(API_BASE + '/api/debtors', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ debtor, deleteOnly: true }),
-                signal: AbortSignal.timeout(10000)
-            });
-        let res;
-        try { res = await request(); }
-        catch (firstError) { res = await request(); }
-        if (!res.ok) throw new Error(await apiError(res, 'Server yoki Telegram xatosi'));
-        state.debtors = state.debtors.filter(item => item.id !== debtorId);
-        saveData();
-        updateUI();
-        renderDebtors();
-        closeModal('detailsModal');
-        const result = await res.json().catch(() => ({}));
-        showToast(result.telegramSent === false ? 'Qarzdor o\'chirildi. Telegram xabari yuborilmadi.' : 'Qarzdor o\'chirildi', result.telegramSent === false ? 'error' : 'success');
-    } catch (e) { showToast(`O'chirish xabari: ${e.message}`, 'error'); console.info(e); }
-}
-
-async function syncToServer(action = null) {
-    try {
-        const res = await fetch(API_BASE + '/api/sync', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ debtors: state.debtors, action })
-        });
-        if (!res.ok) throw new Error('Server xatosi');
-        const data = await res.json();
-        if (action && !data.telegramSent) console.warn('Telegram yuborilmadi');
-    } catch (e) {
-        console.info('Serverga ulanish yo\'q, localStorage ishlatiladi.');
-    }
-}
-
-async function syncFromServer() {
-    try {
-        const requestVersion = localMutationVersion;
-        const res = await fetch(API_BASE + '/api/debtors');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (requestVersion === localMutationVersion && Array.isArray(data.debtors)) {
-            state.debtors = data.debtors;
-            saveData();
-            updateUI();
-            renderDebtors();
-        }
-    } catch (e) { console.info('Serverdan yuklash mumkin emas'); }
-}
-
-// ---------- PDF EKSPORT (SODDA) ----------
+// PDF Eksport
 document.getElementById('exportPdfBtn').addEventListener('click', () => {
-    // Bu yerda haqiqiy PDF generatsiyasi uchun jspdf kutubxonasidan foydalanish mumkin
-    // Hozircha brauzerning chop etish funksiyasidan foydalanamiz
     window.print();
 });
 
-// ---------- EXCEL EKSPORT ----------
+// Excel Eksport
 document.getElementById('exportExcelBtn').addEventListener('click', () => {
-    // CSV formatida eksport (Excel ochadi)
     let csv = 'Ism,Telefon,Manzil,Summa,To\'langan,Qolgan,Status,Muddat\n';
     state.debtors.forEach(d => {
         const rem = d.amount - d.totalPaid;
@@ -968,7 +804,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', () => {
     showToast('📊 Excel (CSV) eksport qilindi', 'success');
 });
 
-// ---------- BACKUP / RESTORE ----------
+// Backup / Restore
 document.getElementById('backupBtn').addEventListener('click', () => {
     const data = { version: '1.0', timestamp: new Date().toISOString(), debtors: state.debtors };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -993,7 +829,6 @@ document.getElementById('restoreFileInput').addEventListener('change', function(
                 updateUI();
                 renderDebtors();
                 showToast('♻️ Zaxiradan tiklandi!', 'success');
-                syncToServer();
             } else {
                 showToast('Noto\'g\'ri backup fayli', 'error');
             }
@@ -1003,31 +838,5 @@ document.getElementById('restoreFileInput').addEventListener('change', function(
     this.value = '';
 });
 
-// ---------- BULK DELETE ----------
-document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => {
-    if (confirm('Barcha qarzlarni o\'chirishni tasdiqlaysizmi?')) {
-        state.debtors = [];
-        saveData();
-        updateUI();
-        renderDebtors();
-        closeModal('settingsModal');
-        showToast('🗑️ Barcha qarzlar o\'chirildi', 'success');
-        syncToServer();
-    }
-});
-
-// ---------- BULK EXPORT ----------
-document.getElementById('bulkExportBtn')?.addEventListener('click', () => {
-    // Faqat faol va qisman qarzlarni eksport qilish
-    const filtered = state.debtors.filter(d => d.status === 'active' || d.status === 'partial');
-    if (!filtered.length) { showToast('Eksport uchun qarzdor yo\'q', 'error'); return; }
-    const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `faol_qarzlar_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    showToast('📤 Tanlanganlar eksport qilindi', 'success');
-});
-
-// ---------- BOSHLANG'ICH CHAQIRUVLAR ----------
+// Asosiy funksiyalarni init qil
 setDefaultDates();
